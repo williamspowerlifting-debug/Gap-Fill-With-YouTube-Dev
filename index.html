@@ -12,6 +12,109 @@
     <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
     <script>
       window.WORKER_URL = "https://gapfill-ai-googledrive-dev.williamspowerlifting.workers.dev";
+      // Extract the unique 11-character Video ID from a standard YouTube URL string
+function getYouTubeId(url) {
+  const match = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/) || 
+                url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/) || 
+                url.match(/youtube\.com\/(?:shorts|live|embed)\/([a-zA-Z0-9_-]{11})/);
+  return match ? match[1] : null;
+}
+
+// Bypasses Cloudflare block by fetching the stream information via the user's browser
+async function processYouTubeSubmission(youtubeUrl) {
+  const statusEl = document.getElementById("statusMessage") || { set textContent(v){} };
+  const progressBar = document.getElementById("progressBarFill");
+  
+  try {
+    statusEl.className = "status";
+    statusEl.textContent = "Extracting video metadata using your local connection...";
+    
+    const videoId = getYouTubeId(youtubeUrl);
+    if (!videoId) {
+      throw new Error("Invalid YouTube link layout or structure provided.");
+    }
+
+    // Handshake request performed directly from the user's residential connection
+    const ytResponse = await fetch("https://youtube.com", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: "MWEB",
+            clientVersion: "2.20250701.07.00",
+            hl: "en",
+            gl: "US"
+          }
+        },
+        videoId: videoId,
+        contentCheckOk: true,
+        racyCheckOk: true
+      })
+    });
+
+    if (!ytResponse.ok) {
+      throw new Error(`YouTube stream collection dropped with code: ${ytResponse.status}`);
+    }
+
+    const ytData = await ytResponse.json();
+    if (ytData?.playabilityStatus?.status && ytData.playabilityStatus.status !== "OK") {
+      throw new Error(`YouTube Block: ${ytData.playabilityStatus.reason || ytData.playabilityStatus.status}`);
+    }
+
+    // Grab combined formats containing integrated audio tracks for AssemblyAI pipelines
+    const combinedFormats = ytData?.streamingData?.formats || [];
+    if (combinedFormats.length === 0) {
+      throw new Error("Unified stream block container missing or hidden for this resource.");
+    }
+
+    // Sort to parse the highest structural tracking resolution container (capped at 720p)
+    combinedFormats.sort((a, b) => (b.height || 0) - (a.height || 0));
+    const targetStreamUrl = combinedFormats[0]?.url;
+
+    if (!targetStreamUrl) {
+      throw new Error("Extracted player metadata format is missing direct address pointers.");
+    }
+
+    statusEl.textContent = "Forwarding stream package token to backend processing worker...";
+    if (progressBar) progressBar.style.width = "50%";
+
+    // Pass the browser-extracted URL down into the updated JSON endpoint of your worker
+    const workerResponse = await fetch(`${window.WORKER_URL}/youtube-to-assemblyai`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        streamUrl: targetStreamUrl,
+        videoId: videoId,
+        title: ytData?.videoDetails?.title || `YouTube Video (${videoId})`
+      })
+    });
+
+    if (!workerResponse.ok) {
+      const errorJson = await workerResponse.json().catch(() => ({}));
+      throw new Error(errorJson.error || `Backend isolate execution failed with status: ${workerResponse.status}`);
+    }
+
+    const payloadResult = await workerResponse.json();
+    
+    statusEl.className = "status success";
+    statusEl.textContent = "Media successfully scheduled for transcription profiling!";
+    if (progressBar) {
+      progressBar.style.width = "100%";
+      progressBar.classList.add("complete");
+    }
+
+    return payloadResult;
+
+  } catch (error) {
+    console.error("Submission pipeline error:", error);
+    statusEl.className = "status error";
+    statusEl.textContent = `Error encountered: ${error.message}`;
+    if (progressBar) progressBar.style.width = "0%";
+    return null;
+  }
+}
+
     </script>
 
     <style>
