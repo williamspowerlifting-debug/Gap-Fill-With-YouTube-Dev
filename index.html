@@ -2171,7 +2171,8 @@ async function processYouTubeSubmission(youtubeUrl) {
       // ▶️ YOUTUBE IMPORT
       // ============================================================
     // ============================================================
-// YOUTUBE IMPORT (Bypasses Datacenter Blocks via Client Handshake) ▶
+// ============================================================
+// YOUTUBE IMPORT (Proxied through Worker to avoid Browser CORS) ▶
 // ============================================================
 async function useYouTubeLink() {
   const url = document.getElementById("videoUrl").value.trim();
@@ -2181,7 +2182,6 @@ async function useYouTubeLink() {
     return;
   }
 
-  // Reset core tracking variables
   currentExerciseId = null;
   youtubeVideoId = videoId;
   videoMode = "youtube";
@@ -2190,90 +2190,31 @@ async function useYouTubeLink() {
   externalVideoUrl = null;
 
   const status = document.getElementById("uploadStatus");
-  const transcribeStatus = document.getElementById("transcribeStatus");
   const btn = document.getElementById("pasteImportBtn");
 
   if (status) {
     status.className = "status";
-    status.innerText = " Extracting video metadata from your local connection...";
+    status.innerText = " Sending link to backend isolate worker...";
   }
   if (btn) btn.disabled = true;
 
-  // Reveal UI components as step processing initializes
   showVideoPlayer();
   revealStep("exerciseDetailsCard");
   if (typeof hideHeaderActivitiesButton === "function") hideHeaderActivitiesButton();
   revealStep("step2Card");
 
+  const transcribeStatus = document.getElementById("transcribeStatus");
   if (transcribeStatus) {
     transcribeStatus.className = "status";
-    transcribeStatus.innerText = " Analyzing stream layouts...";
+    transcribeStatus.innerText = " Extracting audio stream details...";
   }
 
   try {
-    // 1. Fetch player details using the user's home residential connection
-    const ytResponse = await fetch("https://youtube.com", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        context: {
-          client: {
-            clientName: "MWEB",
-            clientVersion: "2.20250701.07.00",
-            hl: "en",
-            gl: "US"
-          }
-        },
-        videoId: videoId,
-        contentCheckOk: true,
-        racyCheckOk: true
-      })
-    });
-
-    if (!ytResponse.ok) {
-      throw new Error(`YouTube API extraction failed with status: ${ytResponse.status}`);
-    }
-
-    const ytData = await ytResponse.json();
-    if (ytData?.playabilityStatus?.status && ytData.playabilityStatus.status !== "OK") {
-      throw new Error(`YouTube Block: ${ytData.playabilityStatus.reason || ytData.playabilityStatus.status}`);
-    }
-
-    // 2. Locate legacy legacy muxed tracking formats containing video + audio together
-    const combinedFormats = ytData?.streamingData?.formats || [];
-    if (combinedFormats.length === 0) {
-      throw new Error("Could not locate a unified stream layout container for this resource.");
-    }
-
-    // Sort to grab the highest resolution combined track available (typically 720p or 360p)
-    combinedFormats.sort((a, b) => (b.height || 0) - (a.height || 0));
-    const finalStreamUrl = combinedFormats[0]?.url;
-
-    if (!finalStreamUrl) {
-      throw new Error("Extracted stream reference pointer contains an empty address string.");
-    }
-
-    // Auto-populate the exercise title field if it's currently empty
-    const nameInput = document.getElementById("exerciseName");
-    const videoTitle = ytData?.videoDetails?.title || `YouTube Video (${videoId})`;
-    if (nameInput && !nameInput.value.trim()) {
-      nameInput.value = videoTitle;
-    }
-
-    if (transcribeStatus) {
-      transcribeStatus.innerText = " Dispatching stream tokens to backend worker...";
-    }
-
-    // 3. Post structured parameters down into the new intake engine of your Worker
+    // Forward directly to your Cloudflare backend
     const res = await fetch(WORKER + "/youtube-to-assemblyai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        youtubeUrl: url,
-        streamUrl: finalStreamUrl,
-        videoId: videoId,
-        title: videoTitle
-      }),
+      body: JSON.stringify({ youtubeUrl: url }),
     });
 
     const data = await res.json().catch(() => ({}));
@@ -2287,14 +2228,9 @@ async function useYouTubeLink() {
     }
     if (btn) btn.disabled = false;
 
-    // 4. Continue your native transcription tracking cycle
-    if (data.transcriptId) {
-      // If your code uses a polling check method like checkTranscriptStatus(id) or autoTranscribe():
-      if (typeof window.checkTranscriptStatus === "function") {
-        window.checkTranscriptStatus(data.transcriptId);
-      } else if (typeof window.autoTranscribe === "function") {
-        await window.autoTranscribe(data.transcriptId);
-      }
+    // Trigger your native application transcription UI workflows
+    if (data.transcriptId && typeof window.autoTranscribe === "function") {
+      await window.autoTranscribe(data.transcriptId);
     }
 
   } catch (err) {
@@ -2310,6 +2246,7 @@ async function useYouTubeLink() {
     if (btn) btn.disabled = false;
   }
 }
+
 
 
       // ============================================================
