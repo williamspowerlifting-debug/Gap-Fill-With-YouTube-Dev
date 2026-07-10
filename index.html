@@ -11,110 +11,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
     <script>
-      window.WORKER_URL = "https://gapfill-ai-googledrive-dev.williamspowerlifting.workers.dev";
-      // Extract the unique 11-character Video ID from a standard YouTube URL string
-function getYouTubeId(url) {
-  const match = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/) || 
-                url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/) || 
-                url.match(/youtube\.com\/(?:shorts|live|embed)\/([a-zA-Z0-9_-]{11})/);
-  return match ? match[1] : null;
-}
-
-// Bypasses Cloudflare block by fetching the stream information via the user's browser
-async function processYouTubeSubmission(youtubeUrl) {
-  const statusEl = document.getElementById("statusMessage") || { set textContent(v){} };
-  const progressBar = document.getElementById("progressBarFill");
-  
-  try {
-    statusEl.className = "status";
-    statusEl.textContent = "Extracting video metadata using your local connection...";
-    
-    const videoId = getYouTubeId(youtubeUrl);
-    if (!videoId) {
-      throw new Error("Invalid YouTube link layout or structure provided.");
-    }
-
-    // Handshake request performed directly from the user's residential connection
-    const ytResponse = await fetch("https://youtube.com", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        context: {
-          client: {
-            clientName: "MWEB",
-            clientVersion: "2.20250701.07.00",
-            hl: "en",
-            gl: "US"
-          }
-        },
-        videoId: videoId,
-        contentCheckOk: true,
-        racyCheckOk: true
-      })
-    });
-
-    if (!ytResponse.ok) {
-      throw new Error(`YouTube stream collection dropped with code: ${ytResponse.status}`);
-    }
-
-    const ytData = await ytResponse.json();
-    if (ytData?.playabilityStatus?.status && ytData.playabilityStatus.status !== "OK") {
-      throw new Error(`YouTube Block: ${ytData.playabilityStatus.reason || ytData.playabilityStatus.status}`);
-    }
-
-    // Grab combined formats containing integrated audio tracks for AssemblyAI pipelines
-    const combinedFormats = ytData?.streamingData?.formats || [];
-    if (combinedFormats.length === 0) {
-      throw new Error("Unified stream block container missing or hidden for this resource.");
-    }
-
-    // Sort to parse the highest structural tracking resolution container (capped at 720p)
-    combinedFormats.sort((a, b) => (b.height || 0) - (a.height || 0));
-    const targetStreamUrl = combinedFormats[0]?.url;
-
-    if (!targetStreamUrl) {
-      throw new Error("Extracted player metadata format is missing direct address pointers.");
-    }
-
-    statusEl.textContent = "Forwarding stream package token to backend processing worker...";
-    if (progressBar) progressBar.style.width = "50%";
-
-    // Pass the browser-extracted URL down into the updated JSON endpoint of your worker
-    const workerResponse = await fetch(`${window.WORKER_URL}/youtube-to-assemblyai`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        streamUrl: targetStreamUrl,
-        videoId: videoId,
-        title: ytData?.videoDetails?.title || `YouTube Video (${videoId})`
-      })
-    });
-
-    if (!workerResponse.ok) {
-      const errorJson = await workerResponse.json().catch(() => ({}));
-      throw new Error(errorJson.error || `Backend isolate execution failed with status: ${workerResponse.status}`);
-    }
-
-    const payloadResult = await workerResponse.json();
-    
-    statusEl.className = "status success";
-    statusEl.textContent = "Media successfully scheduled for transcription profiling!";
-    if (progressBar) {
-      progressBar.style.width = "100%";
-      progressBar.classList.add("complete");
-    }
-
-    return payloadResult;
-
-  } catch (error) {
-    console.error("Submission pipeline error:", error);
-    statusEl.className = "status error";
-    statusEl.textContent = `Error encountered: ${error.message}`;
-    if (progressBar) progressBar.style.width = "0%";
-    return null;
-  }
-}
-
+      window.WORKER_URL = "https://gapfill-ai-googledrive.williamspowerlifting.workers.dev";
     </script>
 
     <style>
@@ -2170,84 +2067,65 @@ async function processYouTubeSubmission(youtubeUrl) {
       // ============================================================
       // ▶️ YOUTUBE IMPORT
       // ============================================================
-    // ============================================================
-// ============================================================
-// YOUTUBE IMPORT (Proxied through Worker to avoid Browser CORS) ▶
-// ============================================================
-async function useYouTubeLink() {
-  const url = document.getElementById("videoUrl").value.trim();
-  const videoId = extractYouTubeId(url);
-  if (!videoId) {
-    alert("That doesn't look like a valid YouTube link.");
-    return;
-  }
+      async function useYouTubeLink() {
+        const url = document.getElementById("videoUrl").value.trim();
+        const videoId = extractYouTubeId(url);
+        if (!videoId) {
+          alert("That doesn't look like a valid YouTube link.");
+          return;
+        }
 
-  currentExerciseId = null;
-  youtubeVideoId = videoId;
-  videoMode = "youtube";
-  bunnyGuid = null;
-  bunnyDirectUrl = null;
-  externalVideoUrl = null;
+        currentExerciseId = null;
+        youtubeVideoId = videoId;
+        videoMode = "youtube";
+        bunnyGuid = null;
+        bunnyDirectUrl = null;
+        externalVideoUrl = null;
 
-  const status = document.getElementById("uploadStatus");
-  const btn = document.getElementById("pasteImportBtn");
+        const status = document.getElementById("uploadStatus");
+        status.className = "status";
+        status.innerText = "🔍 Detecting media source...";
 
-  if (status) {
-    status.className = "status";
-    status.innerText = " Sending link to backend isolate worker...";
-  }
-  if (btn) btn.disabled = true;
+        const btn = document.getElementById("pasteImportBtn");
+        if (btn) btn.disabled = true;
 
-  showVideoPlayer();
-  revealStep("exerciseDetailsCard");
-  if (typeof hideHeaderActivitiesButton === "function") hideHeaderActivitiesButton();
-  revealStep("step2Card");
+        showVideoPlayer();
+        revealStep("exerciseDetailsCard");
+        hideHeaderActivitiesButton();
+        revealStep("step2Card");
 
-  const transcribeStatus = document.getElementById("transcribeStatus");
-  if (transcribeStatus) {
-    transcribeStatus.className = "status";
-    transcribeStatus.innerText = " Extracting audio stream details...";
-  }
+        const transcribeStatus = document.getElementById("transcribeStatus");
+        transcribeStatus.className = "status";
+        transcribeStatus.innerText = "🎵 Extracting audio...";
 
-  try {
-    // Forward directly to your Cloudflare backend
-    const res = await fetch(WORKER + "/youtube-to-assemblyai", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ youtubeUrl: url }),
-    });
+        try {
+          const res = await fetch(WORKER + "/youtube-to-assemblyai", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ youtubeUrl: url }),
+          });
+          const data = await res.json().catch(() => ({}));
 
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new Error(data.error || "Server error (" + res.status + ")");
-    }
+          if (!res.ok) {
+            throw new Error(data.error || "Server error (" + res.status + ")");
+          }
 
-    if (status) {
-      status.className = "status success";
-      status.innerText = " YouTube video loaded successfully.";
-    }
-    if (btn) btn.disabled = false;
+          status.className = "status success";
+          status.innerText = "✅ YouTube video loaded.";
+          if (btn) btn.disabled = false;
 
-    // Trigger your native application transcription UI workflows
-    if (data.transcriptId && typeof window.autoTranscribe === "function") {
-      await window.autoTranscribe(data.transcriptId);
-    }
-
-  } catch (err) {
-    console.error("YouTube conversion pipeline failure:", err);
-    if (status) {
-      status.className = "status error";
-      status.innerText = " " + err.message;
-    }
-    if (transcribeStatus) {
-      transcribeStatus.className = "status error";
-      transcribeStatus.innerText = " Extraction broken.";
-    }
-    if (btn) btn.disabled = false;
-  }
-}
-
-
+          if (data.pending && data.jobId) {
+            transcribeStatus.innerText = "⏳ Generating transcript — checking every few seconds...";
+            await pollTranscriptJob(data.jobId);
+          }
+        } catch (e) {
+          status.className = "status error";
+          status.innerText = "❌ " + e.message;
+          transcribeStatus.className = "status error";
+          transcribeStatus.innerText = "❌ Could not process YouTube video.";
+          if (btn) btn.disabled = false;
+        }
+      }
 
       // ============================================================
       // ☁️ GOOGLE DRIVE IMPORT
