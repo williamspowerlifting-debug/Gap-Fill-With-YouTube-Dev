@@ -11,7 +11,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
     <script>
-      window.WORKER_URL = "https://gapfill-ai-googledrive-dev.williamspowerlifting.workers.dev";
+      window.WORKER_URL = "https://gapfill-ai-googledrive.williamspowerlifting.workers.dev";
     </script>
 
     <style>
@@ -1330,7 +1330,6 @@
           bunnyDirectUrl: bunnyDirectUrl,
           bunnyEmbedUrl: bunnyEmbedUrl,
           externalVideoUrl: externalVideoUrl,
-          youtubeVideoId: youtubeVideoId,
           currentExerciseId: currentExerciseId,
           exerciseName: document.getElementById("exerciseName")?.value || "",
           sentences: JSON.parse(JSON.stringify(sentences)),
@@ -1530,7 +1529,6 @@
             bunnyDirectUrl = data.bunnyDirectUrl;
             bunnyEmbedUrl = data.bunnyEmbedUrl;
             externalVideoUrl = data.externalVideoUrl;
-            youtubeVideoId = data.youtubeVideoId || null;
             currentExerciseId = data.currentExerciseId;
             sentences = data.sentences;
             originalTranscript = data.originalTranscript || null;
@@ -1555,11 +1553,6 @@
                 '<iframe id="builderPlayer" class="video-player" src="' +
                 bunnyEmbedUrl +
                 '?autoplay=false" allowfullscreen allow="autoplay;encrypted-media"></iframe>';
-            } else if (videoMode === "youtube" && youtubeVideoId) {
-              box.innerHTML =
-                '<iframe id="builderPlayer" class="video-player" src="https://www.youtube.com/embed/' +
-                escapeAttr(youtubeVideoId) +
-                '?rel=0" allowfullscreen allow="autoplay;encrypted-media"></iframe>';
             }
 
             // Unroll the hidden dashboard layout workflows directly to editing
@@ -1834,7 +1827,6 @@
       let bunnyDirectUrl = null;
       let bunnyEmbedUrl = null;
       let externalVideoUrl = null;
-      let youtubeVideoId = null;
       let builderPlayer = null;
 
       // Transcript state
@@ -1998,26 +1990,6 @@
       // ============================================================
       // 🔗 SMART LINK ROUTER
       // ============================================================
-      // ============================================================
-      // 🔍 LINK TYPE DETECTION  (YouTube / Google Drive / Direct)
-      // ============================================================
-      function detectLinkType(url) {
-        if (!url) return "UNKNOWN";
-        if (url.includes("drive.google.com")) return "GOOGLE_DRIVE";
-        if (url.includes("youtube.com") || url.includes("youtu.be")) return "YOUTUBE";
-        return "DIRECT_VIDEO";
-      }
-
-      function extractYouTubeId(url) {
-        let m = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
-        if (m) return m[1];
-        m = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
-        if (m) return m[1];
-        m = url.match(/youtube\.com\/(?:shorts|live|embed)\/([a-zA-Z0-9_-]{11})/);
-        if (m) return m[1];
-        return null;
-      }
-
       function usePastedLink() {
         const url = document.getElementById("videoUrl").value.trim();
         if (!url) {
@@ -2025,8 +1997,7 @@
           return;
         }
         currentExerciseId = null;
-        const _linkType = detectLinkType(url);
-        if (_linkType === "GOOGLE_DRIVE") {
+        if (url.includes("drive.google.com")) {
           let driveInput = document.getElementById("driveUrl");
           if (!driveInput) {
             driveInput = document.createElement("input");
@@ -2036,8 +2007,6 @@
           }
           driveInput.value = url;
           useGoogleDriveLink();
-        } else if (_linkType === "YOUTUBE") {
-          useYouTubeLink();
         } else {
           useVideoLink();
         }
@@ -2047,6 +2016,10 @@
         const url = document.getElementById("videoUrl").value.trim();
         if (!url) {
           alert("Please paste a video link.");
+          return;
+        }
+        if (url.includes("youtube.com") || url.includes("youtu.be")) {
+          alert("YouTube links cannot be auto-transcribed. Please upload a video file instead.");
           return;
         }
         externalVideoUrl = url;
@@ -2062,69 +2035,6 @@
         hideHeaderActivitiesButton();
         revealStep("step2Card");
         autoTranscribe();
-      }
-
-      // ============================================================
-      // ▶️ YOUTUBE IMPORT
-      // ============================================================
-      async function useYouTubeLink() {
-        const url = document.getElementById("videoUrl").value.trim();
-        const videoId = extractYouTubeId(url);
-        if (!videoId) {
-          alert("That doesn't look like a valid YouTube link.");
-          return;
-        }
-
-        currentExerciseId = null;
-        youtubeVideoId = videoId;
-        videoMode = "youtube";
-        bunnyGuid = null;
-        bunnyDirectUrl = null;
-        externalVideoUrl = null;
-
-        const status = document.getElementById("uploadStatus");
-        status.className = "status";
-        status.innerText = "🔍 Detecting media source...";
-
-        const btn = document.getElementById("pasteImportBtn");
-        if (btn) btn.disabled = true;
-
-        showVideoPlayer();
-        revealStep("exerciseDetailsCard");
-        hideHeaderActivitiesButton();
-        revealStep("step2Card");
-
-        const transcribeStatus = document.getElementById("transcribeStatus");
-        transcribeStatus.className = "status";
-        transcribeStatus.innerText = "🎵 Extracting audio...";
-
-        try {
-          const res = await fetch(WORKER + "/youtube-to-assemblyai", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ youtubeUrl: url }),
-          });
-          const data = await res.json().catch(() => ({}));
-
-          if (!res.ok) {
-            throw new Error(data.error || "Server error (" + res.status + ")");
-          }
-
-          status.className = "status success";
-          status.innerText = "✅ YouTube video loaded.";
-          if (btn) btn.disabled = false;
-
-          if (data.pending && data.jobId) {
-            transcribeStatus.innerText = "⏳ Generating transcript — checking every few seconds...";
-            await pollTranscriptJob(data.jobId);
-          }
-        } catch (e) {
-          status.className = "status error";
-          status.innerText = "❌ " + e.message;
-          transcribeStatus.className = "status error";
-          transcribeStatus.innerText = "❌ Could not process YouTube video.";
-          if (btn) btn.disabled = false;
-        }
       }
 
       // ============================================================
@@ -2227,11 +2137,6 @@
             '<iframe id="builderPlayer" class="video-player" src="' +
             bunnyEmbedUrl +
             '?autoplay=false" allowfullscreen allow="autoplay;encrypted-media"></iframe>';
-        } else if (videoMode === "youtube" && youtubeVideoId) {
-          box.innerHTML =
-            '<iframe id="builderPlayer" class="video-player" src="https://www.youtube.com/embed/' +
-            escapeAttr(youtubeVideoId) +
-            '?rel=0" allowfullscreen allow="autoplay;encrypted-media"></iframe>';
         }
       }
 
@@ -2966,7 +2871,6 @@ box.innerHTML = html;
         let videoUrl = "";
         if (videoMode === "bunny" && bunnyDirectUrl) videoUrl = bunnyDirectUrl;
         else if (videoMode === "mp4") videoUrl = externalVideoUrl;
-        else if (videoMode === "youtube" && youtubeVideoId) videoUrl = "https://www.youtube.com/embed/" + youtubeVideoId;
 
         return { videoUrl, sentences: groups };
       }
@@ -3056,7 +2960,6 @@ box.innerHTML = html;
         let videoUrl = "";
         if (videoMode === "bunny" && bunnyDirectUrl) videoUrl = bunnyDirectUrl;
         else if (videoMode === "mp4") videoUrl = externalVideoUrl || "";
-        else if (videoMode === "youtube" && youtubeVideoId) videoUrl = "https://www.youtube.com/embed/" + youtubeVideoId;
 
         return {
           teacherId: getTeacherId(),
@@ -3267,20 +3170,10 @@ box.innerHTML = html;
 
           // Restore video
           if (ex.videoUrl) {
-            const _ytMatch = ex.videoUrl.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/);
-            if (_ytMatch) {
-              youtubeVideoId = _ytMatch[1];
-              videoMode = "youtube";
-              externalVideoUrl = null;
-              bunnyGuid = null;
-              bunnyDirectUrl = null;
-            } else {
-              externalVideoUrl = ex.videoUrl;
-              videoMode = "mp4";
-              bunnyGuid = null;
-              bunnyDirectUrl = ex.videoUrl;
-              youtubeVideoId = null;
-            }
+            externalVideoUrl = ex.videoUrl;
+            videoMode = "mp4";
+            bunnyGuid = null;
+            bunnyDirectUrl = ex.videoUrl;
           }
 
           // Restore exercise name
@@ -3327,20 +3220,12 @@ box.innerHTML = html;
 
           // Show the video player
           const box = document.getElementById("videoBox");
-          if (videoMode === "youtube" && youtubeVideoId) {
-            box.innerHTML =
-              '<iframe id="builderPlayer" class="video-player" src="https://www.youtube.com/embed/' +
-              escapeAttr(youtubeVideoId) +
-              '?rel=0" allowfullscreen allow="autoplay;encrypted-media"></iframe>';
-            builderPlayer = null;
-          } else {
-            box.innerHTML =
-              '<video id="builderPlayer" class="video-player" controls>' +
-              '<source src="' +
-              escapeAttr(ex.videoUrl) +
-              '"></video>';
-            builderPlayer = document.getElementById("builderPlayer");
-          }
+          box.innerHTML =
+            '<video id="builderPlayer" class="video-player" controls>' +
+            '<source src="' +
+            escapeAttr(ex.videoUrl) +
+            '"></video>';
+          builderPlayer = document.getElementById("builderPlayer");
 
           // Reveal all steps
           revealStep("exerciseDetailsCard");
