@@ -2141,9 +2141,12 @@
 
         });
 
-        const data = await res.json();
+        const transcript = await res.json();
 
-        console.log("TranscriptAPI response:", data);
+const assemblyData =
+    convertTranscriptApiToAssemblyAI(transcript);
+
+buildSentencesFromTranscript(assemblyData);
 
     } catch (err) {
 
@@ -2297,6 +2300,50 @@
         }));
       }
 
+      function convertTranscriptApiToAssemblyAI(data) {
+
+    const result = {
+        text: "",
+        words: []
+    };
+
+    for (const segment of data.transcript) {
+
+        // Skip caption-only entries
+        if (/^\[.*\]$/.test(segment.text.trim())) {
+            continue;
+        }
+
+        result.text += segment.text + " ";
+
+        const startMs = Math.round(segment.start * 1000);
+        const endMs = Math.round((segment.start + segment.duration) * 1000);
+
+        const tokens = segment.text.split(/\s+/).filter(Boolean);
+
+        const wordDuration = (endMs - startMs) / Math.max(tokens.length, 1);
+
+        tokens.forEach((word, index) => {
+
+            result.words.push({
+
+                text: word,
+
+                start: Math.round(startMs + (index * wordDuration)),
+
+                end: Math.round(startMs + ((index + 1) * wordDuration))
+
+            });
+
+        });
+
+    }
+
+    result.text = result.text.trim();
+
+    return result;
+
+}
       function buildSentencesFromTranscript(data) {
         const status = document.getElementById("transcribeStatus");
         const text = data.text || "";
