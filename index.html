@@ -2314,7 +2314,7 @@ buildSentencesFromTranscript(assemblyData);
             continue;
         }
 
-        result.text += segment.text + " ";
+        result.text += segment.text.trim() + " ";
 
         const startMs = Math.round(segment.start * 1000);
         const endMs = Math.round((segment.start + segment.duration) * 1000);
