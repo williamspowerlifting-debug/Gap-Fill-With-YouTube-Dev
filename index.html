@@ -1990,50 +1990,50 @@
       // ============================================================
       // 🔗 SMART LINK ROUTER
       // ============================================================
-      function usePastedLink() {
-        const url = document.getElementById("videoUrl").value.trim();
-        if (!url) {
-          alert("Please paste a video link first.");
-          return;
-        }
-        currentExerciseId = null;
-        if (url.includes("drive.google.com")) {
-          let driveInput = document.getElementById("driveUrl");
-          if (!driveInput) {
+     function usePastedLink() {
+
+    const url = document.getElementById("videoUrl").value.trim();
+
+    if (!url) {
+        alert("Please paste a video link first.");
+        return;
+    }
+
+    currentExerciseId = null;
+
+    // Google Drive
+    if (url.includes("drive.google.com")) {
+
+        let driveInput = document.getElementById("driveUrl");
+
+        if (!driveInput) {
             driveInput = document.createElement("input");
             driveInput.id = "driveUrl";
             driveInput.style.display = "none";
             document.body.appendChild(driveInput);
-          }
-          driveInput.value = url;
-          useGoogleDriveLink();
-        } else {
-          useVideoLink();
         }
-      }
 
-      function useVideoLink() {
-        const url = document.getElementById("videoUrl").value.trim();
-        if (!url) {
-          alert("Please paste a video link.");
-          return;
-        }
-        
-        externalVideoUrl = url;
-        videoMode = "mp4";
-        bunnyGuid = null;
-        bunnyDirectUrl = null;
+        driveInput.value = url;
+        useGoogleDriveLink();
+        return;
 
-        document.getElementById("uploadStatus").className = "status success";
-        document.getElementById("uploadStatus").innerText = "✅ Link loaded.";
+    }
 
-        showVideoPlayer();
-        revealStep("exerciseDetailsCard");
-        hideHeaderActivitiesButton();
-        revealStep("step2Card");
-        autoTranscribe();
-      }
+    // YouTube
+    if (
+        url.includes("youtube.com") ||
+        url.includes("youtu.be")
+    ) {
 
+        useYouTubeLink(url);
+        return;
+
+    }
+
+    // Everything else
+    useVideoLink();
+
+}
       // ============================================================
       // ☁️ GOOGLE DRIVE IMPORT
       // ============================================================
