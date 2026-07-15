@@ -2121,18 +2121,13 @@
         }
       }
 
-      async function useYouTubeLink() {
+      async function useYouTubeLink(url) {
 
-    const url = document.getElementById("videoUrl").value.trim();
-
-    if (!url) {
-        alert("Please enter a YouTube URL.");
-        return;
-    }
+    console.log("YouTube import starting...");
 
     try {
 
-        const response = await fetch(WORKER + "/youtube-transcript", {
+        const res = await fetch(WORKER + "/youtube-transcript", {
 
             method: "POST",
 
@@ -2146,17 +2141,13 @@
 
         });
 
-        const data = await response.json();
+        const data = await res.json();
 
-        console.log(data);
-
-        alert(data.message);
+        console.log("TranscriptAPI response:", data);
 
     } catch (err) {
 
         console.error(err);
-
-        alert("Connection failed.");
 
     }
 
