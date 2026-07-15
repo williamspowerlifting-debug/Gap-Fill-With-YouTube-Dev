@@ -2124,6 +2124,47 @@
         }
       }
 
+      async function useYouTubeLink() {
+
+    const url = document.getElementById("videoUrl").value.trim();
+
+    if (!url) {
+        alert("Please enter a YouTube URL.");
+        return;
+    }
+
+    try {
+
+        const response = await fetch(WORKER + "/youtube-transcript", {
+
+            method: "POST",
+
+            headers: {
+                "Content-Type": "application/json"
+            },
+
+            body: JSON.stringify({
+                youtubeUrl: url
+            })
+
+        });
+
+        const data = await response.json();
+
+        console.log(data);
+
+        alert(data.message);
+
+    } catch (err) {
+
+        console.error(err);
+
+        alert("Connection failed.");
+
+    }
+
+}
+
       function showVideoPlayer() {
         const box = document.getElementById("videoBox");
         if (videoMode === "mp4") {
