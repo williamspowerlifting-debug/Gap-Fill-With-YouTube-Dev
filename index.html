@@ -2148,6 +2148,9 @@
         });
 
         const transcript = await res.json();
+      if (!res.ok) {
+    throw new Error(transcript.error || "Failed to import YouTube transcript.");
+}
 
         // NEW
         youtubeVideoId = transcript.video_id;
