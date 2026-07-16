@@ -1548,6 +1548,7 @@
                 escapeAttr(externalVideoUrl) +
                 '"></video>';
               builderPlayer = document.getElementById("builderPlayer");
+              mediaPlayer = createHtml5MediaPlayer(builderPlayer);
             } else if (videoMode === "bunny" && bunnyEmbedUrl) {
               box.innerHTML =
                 '<iframe id="builderPlayer" class="video-player" src="' +
@@ -1981,6 +1982,7 @@
                 bunnyDirectUrl +
                 '" type="video/mp4"></video>';
               builderPlayer = document.getElementById("builderPlayer");
+              mediaPlayer = createHtml5MediaPlayer(builderPlayer);
               return;
             }
             const encode = data.encodeProgress || 0;
@@ -2188,6 +2190,7 @@
             escapeAttr(externalVideoUrl) +
             '"></video>';
           builderPlayer = document.getElementById("builderPlayer");
+          mediaPlayer = createHtml5MediaPlayer(builderPlayer);
         } else if (videoMode === "bunny") {
           box.innerHTML =
             '<iframe id="builderPlayer" class="video-player" src="' +
@@ -3401,6 +3404,7 @@ else if (ex.videoUrl) {
             escapeAttr(ex.videoUrl) +
             '"></video>';
           builderPlayer = document.getElementById("builderPlayer");
+          mediaPlayer = createHtml5MediaPlayer(builderPlayer);
 
           // Reveal all steps
           revealStep("exerciseDetailsCard");
