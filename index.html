@@ -3271,7 +3271,7 @@ tags: currentTags || [],
           );
           if (!res.ok) throw new Error("Could not load activity");
           const ex = await res.json();
-
+          console.log("Loaded exercise:", ex);
           closeSavedExercises();
 
           // Restore state
