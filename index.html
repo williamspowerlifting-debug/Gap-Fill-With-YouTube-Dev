@@ -3278,13 +3278,35 @@ tags: currentTags || [],
           currentExerciseId = ex.exerciseId;
           window._lastLessonId = ex.lessonId || null;
 
-          // Restore video
-          if (ex.videoUrl) {
-            externalVideoUrl = ex.videoUrl;
-            videoMode = "mp4";
-            bunnyGuid = null;
-            bunnyDirectUrl = ex.videoUrl;
-          }
+         // Restore video
+if (ex.videoMode === "youtube") {
+
+    videoMode = "youtube";
+
+    youtubeSourceUrl = ex.videoUrl;
+
+    youtubeVideoId = ex.youtubeVideoId;
+
+    youtubeTitle = ex.youtubeTitle;
+
+    externalVideoUrl = null;
+
+    bunnyGuid = null;
+
+    bunnyDirectUrl = null;
+
+}
+else if (ex.videoUrl) {
+
+    externalVideoUrl = ex.videoUrl;
+
+    videoMode = "mp4";
+
+    bunnyGuid = null;
+
+    bunnyDirectUrl = ex.videoUrl;
+
+}
 
           // Restore exercise name
           const nameInput = document.getElementById("exerciseName");
