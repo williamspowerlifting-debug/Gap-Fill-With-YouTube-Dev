@@ -1831,7 +1831,13 @@
       let builderPlayer = null;
       let youtubeSourceUrl = null;
       let youtubeTitle = null;
+      // ============================================================
+      // MEDIA PLAYER ADAPTER
+      // ============================================================
 
+      let mediaPlayer = null;
+      let youtubePlayer = null;
+      
       // Transcript state
       let sentences = [];
       let editModeActive = false;
@@ -2206,6 +2212,43 @@
       function escapeHtml(s) {
         return escapeAttr(s);
       }
+
+      // ============================================================
+// MEDIA PLAYER ADAPTER
+// Keeps the editor independent of the media provider.
+// ============================================================
+
+function createHtml5MediaPlayer(videoElement) {
+
+    return {
+
+        play() {
+            videoElement.play();
+        },
+
+        pause() {
+            videoElement.pause();
+        },
+
+        seek(seconds) {
+            videoElement.currentTime = seconds;
+        },
+
+        currentTime() {
+            return videoElement.currentTime;
+        },
+
+        setPlaybackRate(rate) {
+            videoElement.playbackRate = rate;
+        },
+
+        element() {
+            return videoElement;
+        }
+
+    };
+
+}
     </script>
 
     <script>
