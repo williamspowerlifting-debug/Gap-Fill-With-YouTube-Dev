@@ -3049,8 +3049,16 @@ box.innerHTML = html;
         const name =
           document.getElementById("exerciseName").value.trim() || "Activity " + new Date().toLocaleDateString();
         let videoUrl = "";
-        if (videoMode === "bunny" && bunnyDirectUrl) videoUrl = bunnyDirectUrl;
-        else if (videoMode === "mp4") videoUrl = externalVideoUrl || "";
+
+if (videoMode === "bunny" && bunnyDirectUrl) {
+    videoUrl = bunnyDirectUrl;
+}
+else if (videoMode === "mp4") {
+    videoUrl = externalVideoUrl || "";
+}
+else if (videoMode === "youtube") {
+    videoUrl = youtubeSourceUrl || "";
+}
 
         return {
           teacherId: getTeacherId(),
@@ -3058,8 +3066,16 @@ box.innerHTML = html;
           name,
           createdAt: new Date().toISOString(),
           lessonId: lessonId || window._lastLessonId || null,
-          videoUrl,
-          tags: currentTags || [],
+
+videoUrl,
+
+videoMode,
+
+youtubeVideoId,
+
+youtubeTitle,
+
+tags: currentTags || [],
           originalTranscript: originalTranscript
             ? originalTranscript.map((s) => ({
                 words: s.words.map((w) => ({ t: w.text })),
