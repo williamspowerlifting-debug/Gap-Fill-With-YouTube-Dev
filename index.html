@@ -1827,7 +1827,10 @@
       let bunnyDirectUrl = null;
       let bunnyEmbedUrl = null;
       let externalVideoUrl = null;
+      let youtubeVideoId = null;
       let builderPlayer = null;
+      let youtubeSourceUrl = null;
+      let youtubeTitle = null;
 
       // Transcript state
       let sentences = [];
@@ -2125,6 +2128,9 @@
 
     console.log("YouTube import starting...");
 
+    // NEW
+    youtubeSourceUrl = url;
+
     try {
 
         const res = await fetch(WORKER + "/youtube-transcript", {
@@ -2143,10 +2149,16 @@
 
         const transcript = await res.json();
 
-const assemblyData =
-    convertTranscriptApiToAssemblyAI(transcript);
+        // NEW
+        youtubeVideoId = transcript.video_id;
 
-buildSentencesFromTranscript(assemblyData);
+        // NEW
+        youtubeTitle = transcript.metadata?.title || "YouTube Video";
+
+        const assemblyData =
+            convertTranscriptApiToAssemblyAI(transcript);
+
+        buildSentencesFromTranscript(assemblyData);
 
     } catch (err) {
 
