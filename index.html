@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -1832,6 +1831,14 @@
       let builderPlayer = null;
       let youtubeSourceUrl = null;
       let youtubeTitle = null;
+
+      // ============================================================
+      // YOUTUBE PLAYER
+      // ============================================================
+
+      let youtubeApiReady = false;
+      let youtubePlayer = null;
+      
       // ============================================================
       // MEDIA PLAYER ADAPTER
       // ============================================================
@@ -2217,9 +2224,35 @@
       }
 
       // ============================================================
-// MEDIA PLAYER ADAPTER
-// Keeps the editor independent of the media provider.
-// ============================================================
+      // LOAD YOUTUBE IFRAME API
+      // ============================================================
+
+(function loadYouTubeApi() {
+
+    if (window.YT) {
+        youtubeApiReady = true;
+        return;
+    }
+
+    const tag = document.createElement("script");
+
+    tag.src = "https://www.youtube.com/iframe_api";
+
+    document.head.appendChild(tag);
+
+})();
+      window.onYouTubeIframeAPIReady = function () {
+
+    youtubeApiReady = true;
+
+    console.log("✅ YouTube API Ready");
+
+};
+      
+      // ============================================================
+      // MEDIA PLAYER ADAPTER
+      // Keeps the editor independent of the media provider.
+      // ============================================================
 
 function createHtml5MediaPlayer(videoElement) {
 
