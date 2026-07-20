@@ -2146,56 +2146,57 @@
 
       async function useYouTubeLink(url) {
 
-    console.log("1. YouTube import starting");
-
+    console.log("YouTube import starting...");
+    videoMode = "youtube";
+    externalVideoUrl = null;
+    bunnyGuid = null;
+    bunnyDirectUrl = null;
+    // NEW
     youtubeSourceUrl = url;
 
     try {
 
-        console.log("2. Fetching transcript...");
-
         const res = await fetch(WORKER + "/youtube-transcript", {
+
             method: "POST",
+
             headers: {
                 "Content-Type": "application/json"
             },
+
             body: JSON.stringify({
                 youtubeUrl: url
             })
+
         });
 
-        console.log("3. HTTP Status:", res.status);
-
         const transcript = await res.json();
+      if (!res.ok) {
+    throw new Error(transcript.error || "Failed to import YouTube transcript.");
+}
 
-        console.log("4. Transcript received", transcript);
-
-        if (!res.ok) {
-            throw new Error(transcript.error || "Transcript failed");
-        }
-
+        // NEW
         youtubeVideoId = transcript.video_id;
+
+        // NEW
         youtubeTitle = transcript.metadata?.title || "YouTube Video";
 
-        console.log("5. Video ID:", youtubeVideoId);
-
-        const assemblyData = convertTranscriptApiToAssemblyAI(transcript);
-
-        console.log("6. Converted transcript");
-
+        // Unlike the existing upload/import flows, YouTube does not pass through
+        // autoTranscribe(). Make its video step visible before constructing the
+        // IFrame player: the API must not be initialised in a hidden container.
+        revealStep("exerciseDetailsCard");
+        revealStep("step2Card");
+        hideHeaderActivitiesButton();
         showVideoPlayer();
 
-        console.log("7. showVideoPlayer returned");
+        const assemblyData =
+            convertTranscriptApiToAssemblyAI(transcript);
 
         buildSentencesFromTranscript(assemblyData);
 
-        console.log("8. Finished");
-
     } catch (err) {
 
-        console.error("YouTube import FAILED");
         console.error(err);
-        console.error(err.stack);
 
     }
 
