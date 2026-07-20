@@ -2278,7 +2278,11 @@ function createYouTubeMediaPlayer(elementId, videoId) {
       let player;
       player = new YT.Player(elementId, {
         videoId: videoId,
-        playerVars: { playsinline: 1, rel: 0 },
+       playerVars: {
+  playsinline: 1,
+  rel: 0,
+  origin: window.location.origin
+},
         events: {
           onReady: function () { resolve(player); },
           onError: function () { reject(new Error("YouTube video is unavailable or cannot be embedded")); }
