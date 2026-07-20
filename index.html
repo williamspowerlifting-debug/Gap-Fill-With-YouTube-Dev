@@ -2264,12 +2264,15 @@ function loadYouTubeIframeApi() {
       if (typeof priorReady === "function") priorReady();
       resolve();
     };
+  if (!document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) {
     const script = document.createElement("script");
     script.src = "https://www.youtube.com/iframe_api";
     script.async = true;
-    script.onerror = function () { reject(new Error("YouTube IFrame Player API could not be loaded")); };
+    script.onerror = function () {
+        reject(new Error("YouTube IFrame Player API could not be loaded"));
+    };
     document.head.appendChild(script);
-  });
+}
   return youtubeApiPromise;
 }
 
@@ -2279,7 +2282,11 @@ function createYouTubeMediaPlayer(elementId, videoId) {
       let player;
       player = new YT.Player(elementId, {
         videoId: videoId,
-        playerVars: { playsinline: 1, rel: 0 },
+        playerVars: {
+    origin: window.location.origin,
+    playsinline: 1,
+    rel: 0
+},
         events: {
           onReady: function () { resolve(player); },
           onError: function () { reject(new Error("YouTube video is unavailable or cannot be embedded")); }
