@@ -2488,9 +2488,42 @@ function createHtml5MediaPlayer(videoElement) {
 }
       function buildSentencesFromTranscript(data) {
         const status = document.getElementById("transcribeStatus");
-        const text = data.text || "";
-        const words = data.words || [];
+        let text = "";
+        let words = [];
+        // AssemblyAI format
+if (data.text && data.words) {
+    text = data.text;
+    words = data.words;
+}
 
+// TranscriptAPI format
+else if (Array.isArray(data.transcript)) {
+
+    text = data.transcript
+        .map(s => s.text)
+        .join(" ");
+
+    data.transcript.forEach(section => {
+
+        const start = section.start;
+        const end = section.start + section.duration;
+
+        section.text
+            .split(/\s+/)
+            .filter(Boolean)
+            .forEach(word => {
+
+                words.push({
+                    text: word,
+                    start: start * 1000,
+                    end: end * 1000
+                });
+
+            });
+
+    });
+
+}
         if (!text.trim()) {
           status.className = "status error";
           status.innerText = "❌ Empty transcript.";
