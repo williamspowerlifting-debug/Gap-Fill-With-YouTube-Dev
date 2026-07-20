@@ -2274,7 +2274,7 @@ function loadYouTubeIframeApi() {
     document.head.appendChild(script);
 }
   return youtubeApiPromise;
-}
+});
 
 function createYouTubeMediaPlayer(elementId, videoId) {
   return loadYouTubeIframeApi().then(function () {
