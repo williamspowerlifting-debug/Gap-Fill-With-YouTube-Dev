@@ -3838,6 +3838,14 @@ else if (ex.videoUrl) {
         if (studentState.youtubePlayer) {
           const player = studentState.youtubePlayer;
           clearInterval(studentState.stopTimer);
+          console.log(
+    "Playing sentence",
+    studentState.currentIdx,
+    "Start:",
+    sentence.startTime,
+    "End:",
+    sentence.endTime
+);
           player.seekTo(sentence.startTime, true);
           // Match the existing muted HTML5 autoplay attempt, then restore audio.
           player.mute();
