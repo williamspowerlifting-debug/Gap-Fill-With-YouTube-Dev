@@ -343,7 +343,9 @@
       }
 
       video,
-      iframe.video-player {
+      iframe.video-player,
+      #youtubePlayer,
+      #studentYoutubePlayer {
         width: 100%;
         max-width: 100%;
         height: 380px;
@@ -913,7 +915,9 @@
           padding: 16px;
         }
         video,
-        iframe.video-player {
+        iframe.video-player,
+        #youtubePlayer,
+        #studentYoutubePlayer {
           height: 240px;
         }
         h1 {
@@ -1330,6 +1334,9 @@
           bunnyDirectUrl: bunnyDirectUrl,
           bunnyEmbedUrl: bunnyEmbedUrl,
           externalVideoUrl: externalVideoUrl,
+          youtubeVideoId: youtubeVideoId,
+          youtubeSourceUrl: youtubeSourceUrl,
+          youtubeTitle: youtubeTitle,
           currentExerciseId: currentExerciseId,
           exerciseName: document.getElementById("exerciseName")?.value || "",
           sentences: JSON.parse(JSON.stringify(sentences)),
@@ -1529,6 +1536,9 @@
             bunnyDirectUrl = data.bunnyDirectUrl;
             bunnyEmbedUrl = data.bunnyEmbedUrl;
             externalVideoUrl = data.externalVideoUrl;
+            youtubeVideoId = data.youtubeVideoId || null;
+            youtubeSourceUrl = data.youtubeSourceUrl || null;
+            youtubeTitle = data.youtubeTitle || null;
             currentExerciseId = data.currentExerciseId;
             sentences = data.sentences;
             originalTranscript = data.originalTranscript || null;
@@ -1554,6 +1564,8 @@
                 '<iframe id="builderPlayer" class="video-player" src="' +
                 bunnyEmbedUrl +
                 '?autoplay=false" allowfullscreen allow="autoplay;encrypted-media"></iframe>';
+            } else if (videoMode === "youtube" && youtubeVideoId) {
+              showVideoPlayer();
             }
 
             // Unroll the hidden dashboard layout workflows directly to editing
@@ -2169,6 +2181,8 @@
         // NEW
         youtubeTitle = transcript.metadata?.title || "YouTube Video";
 
+        showVideoPlayer();
+
         const assemblyData =
             convertTranscriptApiToAssemblyAI(transcript);
 
@@ -2196,6 +2210,18 @@
             '<iframe id="builderPlayer" class="video-player" src="' +
             bunnyEmbedUrl +
             '?autoplay=false" allowfullscreen allow="autoplay;encrypted-media"></iframe>';
+        } else if (videoMode === "youtube" && youtubeVideoId) {
+          box.innerHTML = '<div id="youtubePlayer" class="video-player"></div>';
+          builderPlayer = null;
+          mediaPlayer = null;
+          createYouTubeMediaPlayer("youtubePlayer", youtubeVideoId).then(function (player) {
+            youtubePlayer = player;
+            builderPlayer = player;
+            mediaPlayer = createYouTubePlayerAdapter(player);
+          }).catch(function (err) {
+            console.error("YouTube player failed to load:", err);
+            box.innerHTML = '<div class="status error">❌ Could not load the YouTube player.</div>';
+          });
         }
       }
 
@@ -2220,6 +2246,53 @@
 // MEDIA PLAYER ADAPTER
 // Keeps the editor independent of the media provider.
 // ============================================================
+
+// Official YouTube IFrame Player API. Loaded only for YouTube activities.
+let youtubeApiPromise = null;
+function loadYouTubeIframeApi() {
+  if (window.YT && window.YT.Player) return Promise.resolve();
+  if (youtubeApiPromise) return youtubeApiPromise;
+  youtubeApiPromise = new Promise(function (resolve, reject) {
+    const priorReady = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = function () {
+      if (typeof priorReady === "function") priorReady();
+      resolve();
+    };
+    const script = document.createElement("script");
+    script.src = "https://www.youtube.com/iframe_api";
+    script.async = true;
+    script.onerror = function () { reject(new Error("YouTube IFrame Player API could not be loaded")); };
+    document.head.appendChild(script);
+  });
+  return youtubeApiPromise;
+}
+
+function createYouTubeMediaPlayer(elementId, videoId) {
+  return loadYouTubeIframeApi().then(function () {
+    return new Promise(function (resolve, reject) {
+      let player;
+      player = new YT.Player(elementId, {
+        videoId: videoId,
+        playerVars: { playsinline: 1, rel: 0 },
+        events: {
+          onReady: function () { resolve(player); },
+          onError: function () { reject(new Error("YouTube video is unavailable or cannot be embedded")); }
+        }
+      });
+    });
+  });
+}
+
+function createYouTubePlayerAdapter(player) {
+  return {
+    play: function () { player.playVideo(); },
+    pause: function () { player.pauseVideo(); },
+    seek: function (seconds) { player.seekTo(seconds, true); },
+    currentTime: function () { return player.getCurrentTime(); },
+    setPlaybackRate: function (rate) { player.setPlaybackRate(rate); },
+    element: function () { return player; }
+  };
+}
 
 function createHtml5MediaPlayer(videoElement) {
 
@@ -3011,8 +3084,9 @@ box.innerHTML = html;
         let videoUrl = "";
         if (videoMode === "bunny" && bunnyDirectUrl) videoUrl = bunnyDirectUrl;
         else if (videoMode === "mp4") videoUrl = externalVideoUrl;
+        else if (videoMode === "youtube") videoUrl = youtubeSourceUrl || "";
 
-        return { videoUrl, sentences: groups };
+        return { videoUrl, videoMode: videoMode, youtubeVideoId: youtubeVideoId, youtubeTitle: youtubeTitle, sentences: groups };
       }
 
       function previewExercise() {
@@ -3043,6 +3117,9 @@ box.innerHTML = html;
 
         const slim = {
           videoUrl: lesson.videoUrl,
+          videoMode: lesson.videoMode,
+          youtubeVideoId: lesson.youtubeVideoId,
+          youtubeTitle: lesson.youtubeTitle,
           sentences: lesson.sentences.map((s) => ({
             words: s.words.map((w) => (w.isGap ? { t: w.text, g: 1 } : { t: w.text })),
             s: Math.round(s.startTime * 100) / 100,
@@ -3396,15 +3473,19 @@ else if (ex.videoUrl) {
           }
           renderTagRow();
 
-          // Show the video player
-          const box = document.getElementById("videoBox");
-          box.innerHTML =
-            '<video id="builderPlayer" class="video-player" controls>' +
-            '<source src="' +
-            escapeAttr(ex.videoUrl) +
-            '"></video>';
-          builderPlayer = document.getElementById("builderPlayer");
-          mediaPlayer = createHtml5MediaPlayer(builderPlayer);
+          // Show the selected provider. Non-YouTube activities retain the existing HTML5 player.
+          if (videoMode === "youtube") {
+            showVideoPlayer();
+          } else {
+            const box = document.getElementById("videoBox");
+            box.innerHTML =
+              '<video id="builderPlayer" class="video-player" controls>' +
+              '<source src="' +
+              escapeAttr(ex.videoUrl) +
+              '"></video>';
+            builderPlayer = document.getElementById("builderPlayer");
+            mediaPlayer = createHtml5MediaPlayer(builderPlayer);
+          }
 
           // Reveal all steps
           revealStep("exerciseDetailsCard");
@@ -3512,7 +3593,7 @@ else if (ex.videoUrl) {
         }
 
         const groupedSentences = groupSentencesForStudent(lesson.sentences);
-        const finalLesson = { videoUrl: lesson.videoUrl, sentences: groupedSentences };
+        const finalLesson = { videoUrl: lesson.videoUrl, videoMode: lesson.videoMode, youtubeVideoId: lesson.youtubeVideoId, youtubeTitle: lesson.youtubeTitle, sentences: groupedSentences };
 
         studentState = {
           lesson: finalLesson,
@@ -3532,7 +3613,11 @@ else if (ex.videoUrl) {
         if (previewMode) {
           const app = document.getElementById("app");
           app.style.display = "none";
-          if (builderPlayer && typeof builderPlayer.pause === "function") {
+          if (mediaPlayer && typeof mediaPlayer.pause === "function") {
+            try {
+              mediaPlayer.pause();
+            } catch (e) {}
+          } else if (builderPlayer && typeof builderPlayer.pause === "function") {
             try {
               builderPlayer.pause();
             } catch (e) {}
@@ -3557,17 +3642,26 @@ else if (ex.videoUrl) {
 
         studentState.videoEl = document.getElementById("studentVideo");
         renderProgressDots();
-        loadSentence(0);
+        if (finalLesson.videoMode === "youtube" && finalLesson.youtubeVideoId) {
+          createYouTubeMediaPlayer("studentYoutubePlayer", finalLesson.youtubeVideoId).then(function (player) {
+            studentState.youtubePlayer = player;
+            loadSentence(0);
+          }).catch(function (err) {
+            console.error("YouTube player failed to load:", err);
+            const status = document.getElementById("studentStatus");
+            if (status) status.innerText = "❌ Could not load the YouTube player.";
+          });
+        } else {
+          loadSentence(0);
+        }
       }
 
       function buildStudentMarkup(lesson) {
         return (
           '<div class="card">' +
-          '<video id="studentVideo" class="video-player" controls crossorigin="anonymous" muted playsinline>' +
-          '<source src="' +
-          escapeAttr(lesson.videoUrl) +
-          '">' +
-          "</video>" +
+          (lesson.videoMode === "youtube" && lesson.youtubeVideoId
+            ? '<div id="studentYoutubePlayer" class="video-player"></div>'
+            : '<video id="studentVideo" class="video-player" controls crossorigin="anonymous" muted playsinline><source src="' + escapeAttr(lesson.videoUrl) + '"></video>') +
           "</div>" +
           '<div class="card student-card" id="studentCard">' +
           '<div class="progress-dots" id="progressDots"></div>' +
@@ -3584,7 +3678,9 @@ else if (ex.videoUrl) {
       }
 
       function exitPreview() {
-        if (studentState.videoEl) {
+        if (studentState.youtubePlayer) {
+          try { studentState.youtubePlayer.pauseVideo(); } catch (e) {}
+        } else if (studentState.videoEl) {
           try {
             studentState.videoEl.pause();
           } catch (e) {}
@@ -3601,6 +3697,9 @@ else if (ex.videoUrl) {
         if (!raw.sentences) return raw;
         return {
           videoUrl: raw.videoUrl,
+          videoMode: raw.videoMode,
+          youtubeVideoId: raw.youtubeVideoId,
+          youtubeTitle: raw.youtubeTitle,
           sentences: raw.sentences.map((s) => {
             if (s.words) {
               return {
@@ -3731,6 +3830,24 @@ else if (ex.videoUrl) {
 
       function playCurrentSentence() {
         const sentence = studentState.lesson.sentences[studentState.currentIdx];
+        if (studentState.youtubePlayer) {
+          const player = studentState.youtubePlayer;
+          clearInterval(studentState.stopTimer);
+          player.seekTo(sentence.startTime, true);
+          // Match the existing muted HTML5 autoplay attempt, then restore audio.
+          player.mute();
+          player.playVideo();
+          setTimeout(function () { player.unMute(); }, 200);
+          studentState.stopTimer = setInterval(function () {
+            if (player.getCurrentTime() >= sentence.endTime) {
+              player.pauseVideo();
+              clearInterval(studentState.stopTimer);
+              studentState.stopTimer = null;
+            }
+          }, 100);
+          return;
+        }
+
         const v = studentState.videoEl;
         if (!v) return;
         v.currentTime = sentence.startTime;
