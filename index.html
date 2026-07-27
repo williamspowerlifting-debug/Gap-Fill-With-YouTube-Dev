@@ -373,15 +373,6 @@ iframe.video-player,
         -webkit-user-select: text;
         cursor: text;
       }
-      .transcript-box.edit-mode .transcript-word {
-        cursor: text;
-      }
-      .transcript-box.edit-mode .transcript-word:hover {
-        background: #dbeafe;
-      }
-      .transcript-box.edit-mode .transcript-word.gap:hover {
-        background: #fbbf24;
-      }
       .transcript-word {
         display: inline-block;
         padding: 2px 6px;
@@ -531,39 +522,6 @@ iframe.video-player,
         margin-bottom: 12px;
         font-size: 14px;
         color: #1e40af;
-      }
-
-      .transcript-edit-header {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 12px;
-        flex-wrap: wrap;
-        padding-bottom: 10px;
-        border-bottom: 1px solid #e5e7eb;
-      }
-      .sentence-edit-row {
-        margin-bottom: 6px;
-      }
-      .sentence-edit-textarea {
-        width: 100%;
-        min-height: 38px;
-        padding: 8px 10px;
-        border: 1px solid #d1d5db;
-        border-radius: 8px;
-        font-family: inherit;
-        font-size: 15px;
-        box-sizing: border-box;
-        line-height: 1.6;
-        resize: none;
-        overflow: hidden;
-        transition:
-          border-color 0.2s,
-          box-shadow 0.2s;
-      }
-      .sentence-edit-textarea:focus {
-        border-color: #4f46e5;
-        outline: none;
-        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
       }
 
       .level-row {
@@ -718,14 +676,6 @@ iframe.video-player,
         font-size: 13px;
         margin: 0;
       }
-      .autosave-status {
-        margin-top: 8px;
-        text-align: center;
-        font-size: 13px;
-        color: #9ca3af;
-        min-height: 18px;
-        transition: opacity 0.25s ease;
-      }
       .autosave-badge {
         display: inline-block;
         background: #ecfdf5;
@@ -783,12 +733,6 @@ iframe.video-player,
         font-weight: 600;
         font-size: 13px;
         white-space: nowrap;
-      }
-      .ribbon-badge {
-        display: none;
-      }
-      .ribbon-divider {
-        display: none;
       }
       /* Student view */
       .student-card {
@@ -938,61 +882,6 @@ iframe.video-player,
         .transcript-word {
           padding: 4px 8px;
         }
-      }
-
-      /* ── Section-end sidebar ── */
-      #step4Flex {
-        display: block;
-      }
-      #sectionSidebar {
-        display: none;
-        flex-direction: column;
-        gap: 8px;
-        min-width: 76px;
-        padding: 8px;
-        background: #f9fafb;
-        border: 1px solid #e5e7eb;
-        border-radius: 8px;
-        flex-shrink: 0;
-      }
-      #sectionSidebar h4 {
-        font-size: 10px;
-        font-weight: 700;
-        color: #9ca3af;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        margin: 0 0 4px;
-        text-align: center;
-      }
-      .sidebar-tool {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 3px;
-        padding: 8px 4px;
-        border-radius: 6px;
-        border: 2px solid #e5e7eb;
-        background: white;
-        cursor: pointer;
-        font-size: 20px;
-        width: 100%;
-        transition:
-          border-color 0.15s,
-          background 0.15s;
-      }
-      .sidebar-tool span {
-        font-size: 10px;
-        font-weight: 600;
-        color: #6b7280;
-        text-align: center;
-        line-height: 1.2;
-      }
-      .sidebar-tool.tool-active {
-        border-color: #ef4444;
-        background: #fef2f2;
-      }
-      .sidebar-tool.tool-active span {
-        color: #ef4444;
       }
       #transcriptBox {
         flex: 1;
@@ -1849,7 +1738,6 @@ iframe.video-player,
       // ============================================================
 
       let mediaPlayer = null;
-      let youtubePlayer = null;
       
       // Transcript state
       let sentences = [];
@@ -1860,8 +1748,6 @@ iframe.video-player,
       let exerciseProgressCurrent = 0;
       let exerciseProgressTarget = 0;
       let exerciseProgressTimer = null;
-      let exerciseProgressComplete = false;
-      let exercisePulseDirection = 1;
       // Current exercise tracking (for auto-save after link generation)
       let currentExerciseId = null;
       let sectionEndToolActive = false;
@@ -2000,7 +1886,6 @@ iframe.video-player,
             const encode = data.encodeProgress || 0;
 
             status.innerText = "⏳ Video processing... (" + encode + "%)";
-            const exerciseProgress = 25 + encode * 0.5;
 
             setExerciseProgress(30 + Math.round(encode * 0.4), "Processing video...");
           } catch (e) {
@@ -2221,7 +2106,6 @@ iframe.video-player,
           builderPlayer = null;
           mediaPlayer = null;
           createYouTubeMediaPlayer("youtubePlayer", youtubeVideoId).then(function (player) {
-            youtubePlayer = player;
             builderPlayer = player;
             mediaPlayer = createYouTubePlayerAdapter(player);
           }).catch(function (err) {
@@ -2645,26 +2529,6 @@ while (i < sentences.length) {
 
 box.innerHTML = html;
 }
-
-      function getMergeGroups() {
-  const groups = [];
-
-  let i = 0;
-
-  while (i < sentences.length) {
-    const group = [i];
-
-    while (sentences[i].mergeNext && i < sentences.length - 1) {
-      i++;
-      group.push(i);
-    }
-
-    groups.push(group);
-    i++;
-  }
-
-  return groups;
-}
       
       // Paste handler — defined once, referenced by name so we can remove it
       function _handleEditPaste(e) {
@@ -2800,25 +2664,6 @@ box.innerHTML = html;
 
         renderTranscript();
       }
-
-      // ── Mobile double-tap detection ───────────────────────────────────────────────
-      let _lastTapEl = null,
-        _lastTapTime = 0;
-      function handleWordTouchEnd(e, si, wi) {
-        if (!editModeActive) return;
-        const now = Date.now();
-        const same = _lastTapEl === e.currentTarget;
-        if (same && now - _lastTapTime < 350) {
-          e.preventDefault();
-          _lastTapEl = null;
-          _lastTapTime = 0;
-          startWordEdit(si, wi);
-        } else {
-          _lastTapEl = e.currentTarget;
-          _lastTapTime = now;
-        }
-      }
-
       // ============================================================
       // 📝 TRANSCRIPT RENDER & CLICK-TO-TOGGLE GAPS
       // ============================================================
@@ -3018,12 +2863,6 @@ box.innerHTML = html;
       }
       function updateRibbonName() {
         // ribbon name badge removed
-      }
-      function updateRibbonSaveStatus(state) {
-        /* ribbon now shows timestamped save */
-      }
-      function updateRibbonAutoSave(text) {
-        /* merged into updateAutoSaveStatus */
       }
       function toggleSectionEndTool() {
         sectionEndToolActive = !sectionEndToolActive;
