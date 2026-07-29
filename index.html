@@ -2056,6 +2056,9 @@ iframe.video-player,
         });
 
         const transcript = await res.json();
+      window.lastYoutubeTranscript = transcript;
+
+console.log("Raw YouTube transcript:", transcript);
       if (!res.ok) {
     throw new Error(transcript.error || "Failed to import YouTube transcript.");
 }
