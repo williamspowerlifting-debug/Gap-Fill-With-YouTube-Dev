@@ -2077,42 +2077,48 @@ console.log("Raw YouTube transcript:", transcript);
         hideHeaderActivitiesButton();
         showVideoPlayer();
 
+        const youtubeSegments = (transcript.transcript || []).filter(function (segment) {
+          return segment && typeof segment.text === "string" && segment.text.trim() &&
+            !/^\[.*\]$/.test(segment.text.trim()) &&
+            Number.isFinite(segment.start) && Number.isFinite(segment.duration) && segment.duration > 0;
+        });
+        const youtubeSentenceTexts = youtubeSegments.map(function (segment) { return segment.text.trim(); });
         const rawAssemblyData = convertTranscriptApiToAssemblyAI(transcript);
         let assemblyData = rawAssemblyData;
-        let refinedTimings = null;
+        // TranscriptAPI already supplies a timing window for each YouTube sentence.
+        // This is also the safe fallback if AI refinement is unavailable.
+        let refinedTimings = youtubeSegments.map(function (segment) {
+          return { text: segment.text.trim(), start: segment.start, end: segment.start + segment.duration };
+        });
 
-        // YouTube only: refine the generated sentence boundaries when available.
-        // Any failure deliberately preserves the established raw-caption behaviour.
+        // YouTube only: refine boundaries without altering text or forcing speech
+        // across natural silent gaps between sentences.
         try {
-          const sentenceTexts = splitIntoSentences(rawAssemblyData.text || "");
+          if (!youtubeSentenceTexts.length) throw new Error("No timed YouTube sentences");
           const refineRes = await fetch(WORKER + "/refine-youtube-timings", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ transcript: transcript.transcript, sentences: sentenceTexts })
+            body: JSON.stringify({ transcript: youtubeSegments, sentences: youtubeSentenceTexts })
           });
           const refined = await refineRes.json();
-          if (!refineRes.ok || !Array.isArray(refined.sentences) || refined.sentences.length !== sentenceTexts.length ||
+          if (!refineRes.ok || !Array.isArray(refined.sentences) || refined.sentences.length !== youtubeSentenceTexts.length ||
               !refined.sentences.every(function (sentence, index) {
-                return sentence && sentence.text === sentenceTexts[index] &&
+                return sentence && sentence.text === youtubeSentenceTexts[index] &&
                   Number.isFinite(sentence.start) && Number.isFinite(sentence.end) &&
                   sentence.end > sentence.start &&
-                  (!index || sentence.start === refined.sentences[index - 1].end);
+                  (!index || sentence.start >= refined.sentences[index - 1].end);
               })) {
             throw new Error("YouTube timing refinement unavailable");
           }
           refinedTimings = refined.sentences;
           assemblyData = convertTranscriptApiToAssemblyAI({
             transcript: refinedTimings.map(function (sentence) {
-              return {
-                text: sentence.text,
-                start: sentence.start,
-                duration: sentence.end - sentence.start
-              };
+              return { text: sentence.text, start: sentence.start, duration: sentence.end - sentence.start };
             })
           });
         } catch (e) {}
 
-        buildSentencesFromTranscript(assemblyData, refinedTimings);
+        buildSentencesFromTranscript(assemblyData, refinedTimings, youtubeSentenceTexts);
 
     } catch (err) {
 
@@ -2410,7 +2416,7 @@ function createHtml5MediaPlayer(videoElement) {
     return result;
 
 }
-      function buildSentencesFromTranscript(data, refinedTimings) {
+      function buildSentencesFromTranscript(data, refinedTimings, sourceSentenceTexts) {
         const status = document.getElementById("transcribeStatus");
         const text = data.text || "";
         const words = data.words || [];
@@ -2421,7 +2427,9 @@ function createHtml5MediaPlayer(videoElement) {
           return;
         }
 
-        const rawSentences = splitIntoSentences(text);
+        const rawSentences = Array.isArray(sourceSentenceTexts) && sourceSentenceTexts.length
+          ? sourceSentenceTexts
+          : splitIntoSentences(text);
         let wordIdx = 0;
         sentences = rawSentences.map((rawText) => {
           const tokens = rawText.split(/\s+/).filter(Boolean);
