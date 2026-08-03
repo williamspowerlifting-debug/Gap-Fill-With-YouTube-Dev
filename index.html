@@ -2077,10 +2077,42 @@ console.log("Raw YouTube transcript:", transcript);
         hideHeaderActivitiesButton();
         showVideoPlayer();
 
-        const assemblyData =
-            convertTranscriptApiToAssemblyAI(transcript);
+        const rawAssemblyData = convertTranscriptApiToAssemblyAI(transcript);
+        let assemblyData = rawAssemblyData;
+        let refinedTimings = null;
 
-        buildSentencesFromTranscript(assemblyData);
+        // YouTube only: refine the generated sentence boundaries when available.
+        // Any failure deliberately preserves the established raw-caption behaviour.
+        try {
+          const sentenceTexts = splitIntoSentences(rawAssemblyData.text || "");
+          const refineRes = await fetch(WORKER + "/refine-youtube-timings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ transcript: transcript.transcript, sentences: sentenceTexts })
+          });
+          const refined = await refineRes.json();
+          if (!refineRes.ok || !Array.isArray(refined.sentences) || refined.sentences.length !== sentenceTexts.length ||
+              !refined.sentences.every(function (sentence, index) {
+                return sentence && sentence.text === sentenceTexts[index] &&
+                  Number.isFinite(sentence.start) && Number.isFinite(sentence.end) &&
+                  sentence.end > sentence.start &&
+                  (!index || sentence.start === refined.sentences[index - 1].end);
+              })) {
+            throw new Error("YouTube timing refinement unavailable");
+          }
+          refinedTimings = refined.sentences;
+          assemblyData = convertTranscriptApiToAssemblyAI({
+            transcript: refinedTimings.map(function (sentence) {
+              return {
+                text: sentence.text,
+                start: sentence.start,
+                duration: sentence.end - sentence.start
+              };
+            })
+          });
+        } catch (e) {}
+
+        buildSentencesFromTranscript(assemblyData, refinedTimings);
 
     } catch (err) {
 
@@ -2378,7 +2410,7 @@ function createHtml5MediaPlayer(videoElement) {
     return result;
 
 }
-      function buildSentencesFromTranscript(data) {
+      function buildSentencesFromTranscript(data, refinedTimings) {
         const status = document.getElementById("transcribeStatus");
         const text = data.text || "";
         const words = data.words || [];
@@ -2422,10 +2454,17 @@ function createHtml5MediaPlayer(videoElement) {
           };
         });
 
-        sentences.forEach((s, i) => {
-          if (i < sentences.length - 1) s.endTime = Math.max(s.endTime, sentences[i + 1].startTime - 0.1);
-          else s.endTime = s.endTime + 1.5;
-        });
+        if (Array.isArray(refinedTimings) && refinedTimings.length === sentences.length) {
+          sentences.forEach((sentence, index) => {
+            sentence.startTime = refinedTimings[index].start;
+            sentence.endTime = refinedTimings[index].end;
+          });
+        } else {
+          sentences.forEach((s, i) => {
+            if (i < sentences.length - 1) s.endTime = Math.max(s.endTime, sentences[i + 1].startTime - 0.1);
+            else s.endTime = s.endTime + 1.5;
+          });
+        }
 
         status.className = "status success";
         status.innerText = "✅ Transcript ready (" + sentences.length + " sentences).";
