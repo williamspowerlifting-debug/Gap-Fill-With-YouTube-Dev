@@ -312,6 +312,22 @@
       .progress-fill.complete::after {
         display: none;
       }
+      .progress-fill.is-indeterminate {
+        width: 100% !important;
+        transform-origin: left center;
+        animation: activityProgressPulse 1.15s ease-in-out infinite;
+      }
+      @keyframes activityProgressPulse {
+        0%, 100% { opacity: 0.48; transform: scaleX(0.35); }
+        50% { opacity: 1; transform: scaleX(1); }
+      }
+      #exerciseProgressContainer {
+        opacity: 1;
+        transition: opacity 0.45s ease;
+      }
+      #exerciseProgressContainer.exercise-progress-fading {
+        opacity: 0;
+      }
       .transcript-box.edit-mode {
         caret-color: #4f46e5;
         cursor: text;
@@ -1245,6 +1261,8 @@ iframe.video-player,
       }
 
       function setExerciseProgress(percent, message) {
+        const progressBar = document.getElementById("exerciseProgressBar");
+        progressBar.classList.remove("is-indeterminate");
         exerciseProgressTarget = percent;
 
         document.getElementById("exerciseProgressText").textContent = message;
@@ -1273,13 +1291,34 @@ iframe.video-player,
         }, 40);
       }
 
+      function startIndeterminateExerciseProgress(message) {
+        const progress = document.getElementById("exerciseProgressContainer");
+        const progressBar = document.getElementById("exerciseProgressBar");
+        const text = document.getElementById("exerciseProgressText");
+        const save = document.getElementById("exerciseSaveContainer");
+        if (exerciseProgressTimer) {
+          clearInterval(exerciseProgressTimer);
+          exerciseProgressTimer = null;
+        }
+        exerciseProgressCurrent = 0;
+        exerciseProgressTarget = 0;
+        progress.classList.remove("exercise-progress-fading");
+        progress.style.display = "block";
+        progressBar.classList.add("is-indeterminate");
+        text.textContent = message || "Preparing activity…";
+        if (save) save.style.display = "none";
+      }
+
       function showExerciseSaveButton() {
         const progress = document.getElementById("exerciseProgressContainer");
-
         const save = document.getElementById("exerciseSaveContainer");
-
-        if (progress) progress.style.display = "none";
         if (save) save.style.display = "block";
+        if (!progress) return;
+        progress.classList.add("exercise-progress-fading");
+        setTimeout(function () {
+          progress.style.display = "none";
+          progress.classList.remove("exercise-progress-fading");
+        }, 450);
       }
       let pendingDoneToast = false;
       let activeToastTimer = null;
@@ -2081,6 +2120,8 @@ iframe.video-player,
         const btn = document.getElementById("pasteImportBtn");
         progressWrap.style.display = "none";
         progressWrap.classList.remove("progress-fading");
+        const activityProgress = document.getElementById("exerciseProgressContainer");
+        if (activityProgress) activityProgress.style.display = "none";
         status.className = "status error";
         status.innerText = "❌ " + message;
         if (btn) btn.disabled = false;
@@ -2135,6 +2176,7 @@ console.log("Raw YouTube transcript:", transcript);
         revealStep("step2Card");
         hideHeaderActivitiesButton();
         const youtubePlayerReady = showVideoPlayer();
+        startIndeterminateExerciseProgress("Preparing activity…");
         updateYouTubeImportProgress(65, "⏳ Preparing timed transcript…");
 
         const youtubeSegments = (transcript.transcript || []).filter(function (segment) {
@@ -2198,6 +2240,8 @@ console.log("Raw YouTube transcript:", transcript);
         updateYouTubeImportProgress(90, "⏳ Finalising activity…");
         const player = await youtubePlayerReady;
         if (!player) throw new Error("Could not load the YouTube player.");
+        setExerciseProgress(100, "Activity ready");
+        setTimeout(showExerciseSaveButton, 500);
         finishYouTubeImportProgress();
 
     } catch (err) {
