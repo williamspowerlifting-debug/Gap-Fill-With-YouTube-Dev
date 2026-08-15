@@ -2110,12 +2110,28 @@ console.log("Raw YouTube transcript:", transcript);
               })) {
             throw new Error("YouTube timing refinement unavailable");
           }
-          refinedTimings = refined.sentences;
-          assemblyData = convertTranscriptApiToAssemblyAI({
-            transcript: refinedTimings.map(function (sentence) {
-              return { text: sentence.text, start: sentence.start, duration: sentence.end - sentence.start };
-            })
+          // TranscriptAPI's one-to-one caption window is the authoritative
+          // playback boundary for the displayed YouTube sentence. AI may help
+          // validate alignment, but must never extend playback into the next
+          // caption window (or trim a sentence's final words).
+          const preservesSourceWindows = refined.sentences.every(function (sentence, index) {
+            const source = youtubeSegments[index];
+            const sourceEnd = source.start + source.duration;
+            return sentence.start >= source.start && sentence.end <= sourceEnd;
           });
+          if (!preservesSourceWindows) throw new Error("AI timing exceeds source caption windows");
+
+          // Keep the complete original caption window after validation. This
+          // prevents estimated AI boundaries from omitting spoken words or
+          // leaking into the following displayed sentence.
+          refinedTimings = youtubeSegments.map(function (segment) {
+            return {
+              text: segment.text.trim(),
+              start: segment.start,
+              end: segment.start + segment.duration
+            };
+          });
+          assemblyData = rawAssemblyData;
         } catch (e) {}
 
         buildSentencesFromTranscript(assemblyData, refinedTimings, youtubeSentenceTexts);
