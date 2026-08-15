@@ -248,6 +248,11 @@
         margin-top: 10px;
         height: 22px;
         display: none;
+        opacity: 1;
+        transition: opacity 0.45s ease;
+      }
+      .progress-wrap.progress-fading {
+        opacity: 0;
       }
       .progress-bar {
         background: linear-gradient(90deg, #4f46e5, #10b981);
@@ -2029,9 +2034,62 @@ iframe.video-player,
         }
       }
 
+      function startYouTubeImportProgress() {
+        const progressWrap = document.getElementById("progressWrap");
+        const progressBar = document.getElementById("progressBar");
+        const status = document.getElementById("uploadStatus");
+        const btn = document.getElementById("pasteImportBtn");
+        progressWrap.classList.remove("progress-fading");
+        progressWrap.style.display = "block";
+        progressBar.style.width = "15%";
+        progressBar.innerText = "15%";
+        status.className = "status";
+        status.innerText = "⏳ Importing YouTube transcript…";
+        if (btn) btn.disabled = true;
+      }
+
+      function updateYouTubeImportProgress(percent, message) {
+        const progressBar = document.getElementById("progressBar");
+        const status = document.getElementById("uploadStatus");
+        progressBar.style.width = percent + "%";
+        progressBar.innerText = percent + "%";
+        if (message) status.innerText = message;
+      }
+
+      function finishYouTubeImportProgress() {
+        const progressWrap = document.getElementById("progressWrap");
+        const progressBar = document.getElementById("progressBar");
+        const status = document.getElementById("uploadStatus");
+        const btn = document.getElementById("pasteImportBtn");
+        progressBar.style.width = "100%";
+        progressBar.innerText = "Done";
+        status.className = "status success";
+        status.innerText = "✅ YouTube video and transcript are ready.";
+        if (btn) btn.disabled = false;
+        setTimeout(function () {
+          progressWrap.classList.add("progress-fading");
+          setTimeout(function () {
+            progressWrap.style.display = "none";
+            progressWrap.classList.remove("progress-fading");
+          }, 450);
+        }, 650);
+      }
+
+      function failYouTubeImportProgress(message) {
+        const progressWrap = document.getElementById("progressWrap");
+        const status = document.getElementById("uploadStatus");
+        const btn = document.getElementById("pasteImportBtn");
+        progressWrap.style.display = "none";
+        progressWrap.classList.remove("progress-fading");
+        status.className = "status error";
+        status.innerText = "❌ " + message;
+        if (btn) btn.disabled = false;
+      }
+
       async function useYouTubeLink(url) {
 
     console.log("YouTube import starting...");
+    startYouTubeImportProgress();
     videoMode = "youtube";
     externalVideoUrl = null;
     bunnyGuid = null;
@@ -2065,6 +2123,7 @@ console.log("Raw YouTube transcript:", transcript);
 
         // NEW
         youtubeVideoId = transcript.video_id;
+        updateYouTubeImportProgress(45, "⏳ Loading YouTube player…");
 
         // NEW
         youtubeTitle = transcript.metadata?.title || "YouTube Video";
@@ -2075,7 +2134,8 @@ console.log("Raw YouTube transcript:", transcript);
         revealStep("exerciseDetailsCard");
         revealStep("step2Card");
         hideHeaderActivitiesButton();
-        showVideoPlayer();
+        const youtubePlayerReady = showVideoPlayer();
+        updateYouTubeImportProgress(65, "⏳ Preparing timed transcript…");
 
         const youtubeSegments = (transcript.transcript || []).filter(function (segment) {
           return segment && typeof segment.text === "string" && segment.text.trim() &&
@@ -2135,10 +2195,15 @@ console.log("Raw YouTube transcript:", transcript);
         } catch (e) {}
 
         buildSentencesFromTranscript(assemblyData, refinedTimings, youtubeSentenceTexts);
+        updateYouTubeImportProgress(90, "⏳ Finalising activity…");
+        const player = await youtubePlayerReady;
+        if (!player) throw new Error("Could not load the YouTube player.");
+        finishYouTubeImportProgress();
 
     } catch (err) {
 
         console.error(err);
+        failYouTubeImportProgress(err.message || "Failed to import YouTube video.");
 
     }
 
@@ -2162,12 +2227,14 @@ console.log("Raw YouTube transcript:", transcript);
           box.innerHTML = '<div id="youtubePlayer" class="video-player"></div>';
           builderPlayer = null;
           mediaPlayer = null;
-          createYouTubeMediaPlayer("youtubePlayer", youtubeVideoId).then(function (player) {
+          return createYouTubeMediaPlayer("youtubePlayer", youtubeVideoId).then(function (player) {
             builderPlayer = player;
             mediaPlayer = createYouTubePlayerAdapter(player);
+            return player;
           }).catch(function (err) {
             console.error("YouTube player failed to load:", err);
             box.innerHTML = '<div class="status error">❌ Could not load the YouTube player.</div>';
+            return null;
           });
         }
       }
