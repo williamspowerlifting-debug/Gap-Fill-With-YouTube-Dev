@@ -1281,8 +1281,6 @@ iframe.video-player,
         <div style="margin-bottom: 14px"></div>
 
         <button class="primary-blue full" onclick="previewExercise()">👀 Preview</button>
-        <button class="success full" onclick="generateLink()">🔗 Generate Student Link</button>
-        <div class="status" id="link"></div>
 
         <div style="margin-top: 12px; border-top: 1px solid #e5e7eb; padding-top: 12px; display: flex; justify-content: flex-end; flex-wrap: wrap">
           <button class="success" id="doneBtn" onclick="doneEditing()" style="padding: 10px 24px; font-size: 15px">
@@ -1347,10 +1345,6 @@ iframe.video-player,
             — See what students will see.
           </li>
           <li>
-            <b>Student Link</b>
-            — Copy and send. No signup needed.
-          </li>
-          <li>
             <b>Save Exercise</b>
             — Saves to your Saved Exercises list on this browser. Sign in with Google to sync your exercises across
             devices.
@@ -1360,7 +1354,7 @@ iframe.video-player,
         <p>
           Click
           <b>📚 My Activities</b>
-          at any time to see all activities you've created. You can open them, copy student links, or delete them.
+          at any time to see all activities you've created. You can open or delete them.
         </p>
         <h3>How students use it</h3>
         <ol>
@@ -1488,7 +1482,7 @@ iframe.video-player,
     <div class="student-card" style="text-align: left; padding: 24px;">
       <div class="student-header">
         <div>
-          <h2 id="dashboardStudentName">Welcome, Student!</h2>
+          <h2 id="dashboardStudentName">Welcome!</h2>
           <div id="dashboardClassName" style="font-size: 14px; color: #6b7280; margin-top: 4px;">Classroom</div>
         </div>
         <button class="secondary" style="padding: 8px 16px; font-size: 14px;" onclick="studentLogout()">Logout</button>
@@ -1801,24 +1795,6 @@ iframe.video-player,
             hideHeaderActivitiesButton();
 
             showExerciseSaveButton();
-            if (window._lastLessonId) {
-              const linkBox = document.getElementById("link");
-
-              if (linkBox) {
-                linkBox.className = "status success";
-                linkBox.innerHTML =
-                  '<b>✅ Student Link:</b> <code style="font-size:1.1em;letter-spacing:1px;">' +
-                  window._lastLessonId +
-                  "</code><br>" +
-                  '<a href="' +
-                  window._lastLink +
-                  '" target="_blank" style="word-break:break-all;">' +
-                  window._lastLink +
-                  "</a>" +
-                  '<br><button class="primary-blue" style="margin-top:8px;" onclick="copyLink()">📋 Copy Link</button>';
-              }
-            }
-          } else {
             // Clear out database if they deliberately choose to wipe and start fresh
             localStorage.removeItem(_WINDOW_SCRATCHPAD_KEY);
           }
@@ -1886,13 +1862,11 @@ iframe.video-player,
                 ? ex.sentences.reduce((n, s) => n + (s.words || []).filter((w) => w.g).length, 0)
                 : 0;
               const sentCount = ex.sentences ? ex.sentences.length : 0;
-              const studentLink = ex.lessonId ? location.origin + location.pathname + "?id=" + ex.lessonId : null;
               return (
                 '<div class="exercise-item">' +
                 '<div class="exercise-item-title">' +
                 escapeHtml(ex.name || "Untitled") +
-                (ex.lessonId ? '<span class="autosave-badge">🔗 Link ready</span>' : "") +
-                "</div>" +
+                  "</div>" +
                 '<div class="exercise-item-meta">📅 ' +
                 date +
                 " &nbsp;·&nbsp; 📝 " +
@@ -1908,13 +1882,6 @@ iframe.video-player,
                 '<button class="primary-blue" onclick="openSavedExercise(\'' +
                 ex.exerciseId +
                 "')\">✏️ Open & Edit</button>" +
-                (studentLink
-                  ? '<button class="success" onclick="copySavedLink(\'' +
-                    escapeAttr(studentLink) +
-                    "')\">📋 Copy Student Link</button>"
-                  : '<button class="secondary" onclick="generateLinkForSaved(\'' +
-                    ex.exerciseId +
-                    "')\">🔗 Generate Link</button>") +
                 '<button class="danger" onclick="deleteSavedExercise(\'' +
                 ex.exerciseId +
                 "')\">🗑 Delete</button>" +
@@ -3093,8 +3060,9 @@ async function handleStudentLogin() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Login failed");
     
-    // Save token and redirect to dashboard view
+    // Save token and student name for the dashboard
     _currentStudentToken = data.token;
+    sessionStorage.setItem("_studentName", data.name || "Student");
     history.replaceState(null, "", "?token=" + encodeURIComponent(data.token));
     
     document.getElementById("studentLoginView").style.display = "none";
@@ -3133,7 +3101,8 @@ async function renderStudentDashboard(token) {
       throw new Error(data.error || "Failed to load dashboard");
     }
     
-    document.getElementById("dashboardStudentName").innerText = "Welcome, " + (data.name || "Student") + "!";
+    const studentName = data.name || sessionStorage.getItem("_studentName") || "Student";
+    document.getElementById("dashboardStudentName").innerText = "Welcome, " + studentName + "!";
     // We don't have classroom name in this endpoint, but we can fetch it or just show "Your Classroom"
     document.getElementById("dashboardClassName").innerText = "Your Classroom";
     
@@ -4078,71 +4047,6 @@ box.innerHTML = html;
         startStudent(lesson, true);
       }
 
-      async function generateLink() {
-        const lesson = buildLesson();
-        if (!lesson.videoUrl) {
-          alert("Add a video first.");
-          return;
-        }
-        const hasGaps = lesson.sentences.some((s) => s.words.some((w) => w.isGap));
-        if (!hasGaps) {
-          alert("No gaps yet. Click words or use Generate Gaps first.");
-          return;
-        }
-
-        const slim = {
-          videoUrl: lesson.videoUrl,
-          videoMode: lesson.videoMode,
-          youtubeVideoId: lesson.youtubeVideoId,
-          youtubeTitle: lesson.youtubeTitle,
-          sentences: lesson.sentences.map((s) => ({
-            words: s.words.map((w) => (w.isGap ? { t: w.text, g: 1 } : { t: w.text })),
-            s: Math.round(s.startTime * 100) / 100,
-            e: Math.round(s.endTime * 100) / 100,
-            ...(s.sectionEnd ? { x: 1 } : {}),
-          })),
-        };
-
-        const linkBox = document.getElementById("link");
-        linkBox.className = "status";
-        linkBox.innerHTML = "⏳ Saving lesson…";
-
-        try {
-          const res = await fetch(WORKER + "/save-lesson", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(slim),
-          });
-          const data = await res.json();
-          if (!res.ok || !data.id) throw new Error(data.error || "Save failed");
-
-          const link = location.origin + location.pathname + "?id=" + data.id;
-          linkBox.className = "status success";
-          linkBox.innerHTML =
-            '<b>✅ Student Link:</b> <code style="font-size:1.1em;letter-spacing:1px;">' +
-            data.id +
-            "</code><br>" +
-            '<a href="' +
-            link +
-            '" target="_blank" style="word-break:break-all;">' +
-            link +
-            "</a>" +
-            '<br><button class="primary-blue" style="margin-top:8px;" onclick="copyLink()">📋 Copy Link</button>';
-          window._lastLink = link;
-          window._lastLessonId = data.id;
-
-          // Auto-save exercise with the student link ID attached
-          await performAutoSave("Student link generated");
-        } catch (e) {
-          linkBox.className = "status error";
-          linkBox.innerHTML = "❌ Could not save lesson: " + e.message;
-        }
-      }
-
-      function copyLink() {
-        navigator.clipboard.writeText(window._lastLink || "").then(() => alert("Link copied!"));
-      }
-
       // ============================================================
       // 💾 SAVE EXERCISE — teacher's saved exercises in KV
       // ============================================================
@@ -4270,7 +4174,6 @@ tags: currentTags || [],
               : "Unknown date";
             const gapCount = (ex.sentences || []).reduce((n, s) => n + (s.words || []).filter((w) => w.g).length, 0);
             const sentCount = (ex.sentences || []).length;
-            const studentLink = ex.lessonId ? location.origin + location.pathname + "?id=" + ex.lessonId : null;
             const tagsHtml =
               Array.isArray(ex.tags) && ex.tags.length
                 ? ex.tags
@@ -4286,7 +4189,6 @@ tags: currentTags || [],
               '<div class="exercise-item">' +
               '<div class="exercise-item-title">' +
               escapeHtml(ex.name || "Untitled") +
-              (ex.lessonId ? '<span class="autosave-badge">🔗 Link ready</span>' : "") +
               (tagsHtml ? '<span style="margin-left:6px;">' + tagsHtml + "</span>" : "") +
               "</div>" +
               '<div class="exercise-item-meta">📅 ' +
@@ -4302,9 +4204,6 @@ tags: currentTags || [],
               "</div>" +
               '<div class="exercise-item-actions">' +
               '<button class="primary-blue" onclick="openSavedExercise(\'' + ex.exerciseId + '\')">✏️ Open & Edit</button>' +
-              (studentLink
-                ? '<button class="success" onclick="copySavedLink(\'' + escapeAttr(studentLink) + '\')">📋 Copy Student Link</button>'
-                : '<button class="secondary" onclick="generateLinkForSaved(\'' + ex.exerciseId + '\')">🔗 Generate Link</button>') +
               '<button class="danger" onclick="deleteSavedExercise(\'' + ex.exerciseId + '\')">🗑 Delete</button>' +
               "</div></div>"
             );
@@ -4513,16 +4412,6 @@ else if (ex.videoUrl) {
         } catch (e) {
           list.innerHTML = '<p style="color:#991b1b;">❌ ' + e.message + "</p>";
         }
-      }
-
-      function copySavedLink(link) {
-        navigator.clipboard.writeText(link).then(() => alert("Student link copied!"));
-      }
-
-      async function generateLinkForSaved(exerciseId) {
-        closeSavedExercises();
-        await openSavedExercise(exerciseId);
-        await generateLink();
       }
 
       async function deleteSavedExercise(exerciseId) {
