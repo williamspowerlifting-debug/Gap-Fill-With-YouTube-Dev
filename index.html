@@ -3383,29 +3383,52 @@ function studentLogout() {
       // 🔀 GROUP SENTENCES
       // ============================================================
       function groupSentencesForStudent(rawSentences) {
-        // Saved classroom activities use compact s/e timing fields.
-        // The student player uses startTime/endTime, so normalise both formats here.
-        return (rawSentences || []).map((s) => {
-          const start = Number(s.startTime !== undefined ? s.startTime : s.s);
-          const end = Number(s.endTime !== undefined ? s.endTime : s.e);
+        // Classroom activities are stored in the compact format used by the
+        // teacher save routine: sentence timings use s/e and words use t/g.
+        // Older activities may already use startTime/endTime and text/isGap.
+        // Convert all supported formats into the single format used by the
+        // student player.
+        return (Array.isArray(rawSentences) ? rawSentences : []).map((s) => {
+          const start = Number(s && s.startTime !== undefined ? s.startTime : s && s.s);
+          const end = Number(s && s.endTime !== undefined ? s.endTime : s && s.e);
           const startTime = Number.isFinite(start) ? start : 0;
           const endTime = Number.isFinite(end) ? end : startTime + 5;
 
+          const words = Array.isArray(s && s.words) ? s.words.map((w) => {
+            if (typeof w === "string") {
+              return { text: w, isGap: false };
+            }
+
+            if (!w || typeof w !== "object") {
+              return { text: String(w ?? ""), isGap: false };
+            }
+
+            // Compact saved format: { t: "word", g: 1 }
+            // Also accept { t: "word", gap: true } for compatibility.
+            if (Object.prototype.hasOwnProperty.call(w, "t")) {
+              return {
+                text: String(w.t ?? ""),
+                isGap: w.g === 1 || w.g === true || w.g === "1" || w.g === "true" || w.gap === true,
+              };
+            }
+
+            // Expanded format: { text: "word", isGap: true }
+            if (Object.prototype.hasOwnProperty.call(w, "text")) {
+              return {
+                text: String(w.text ?? ""),
+                isGap: w.isGap === true || w.isGap === 1 || w.isGap === "1" || w.isGap === "true" || w.gap === true,
+              };
+            }
+
+            return { text: String(w), isGap: false };
+          }) : [];
+
           return {
-            words: Array.isArray(s.words)
-              ? s.words.map((w) => {
-                  if (typeof w === "object" && w !== null && "text" in w) {
-                    return { text: w.text, isGap: !!w.isGap };
-                  }
-                  if (typeof w === "object" && w !== null && "t" in w) {
-                    return { text: w.t, isGap: !!w.g };
-                  }
-                  return { text: String(w ?? ""), isGap: false };
-                })
-              : [],
+            words,
             startTime,
             endTime: endTime >= startTime ? endTime : startTime + 5,
-            sectionEnd: !!(s.sectionEnd || s.x),
+            sectionEnd: !!(s && (s.sectionEnd || s.x)),
+            mergeNext: !!(s && (s.mergeNext || s.m)),
           };
         });
       }
