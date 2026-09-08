@@ -935,6 +935,83 @@ iframe.video-player,
       #transcriptBox.section-end-mode .transcript-word {
         cursor: text;
       }
+      /* ── Classroom Management UI ── */
+.classroom-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 20px;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+.classroom-overlay.show { display: flex; }
+.classroom-modal {
+  background: white;
+  border-radius: 14px;
+  max-width: 900px;
+  width: 100%;
+  padding: 24px;
+  margin: auto;
+  position: relative;
+}
+.classroom-modal h2 { margin-top: 0; color: #4f46e5; }
+.classroom-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.classroom-item:hover { background: #f9fafb; }
+.classroom-code {
+  font-family: monospace;
+  font-size: 18px;
+  font-weight: 700;
+  background: #e0e7ff;
+  color: #4338ca;
+  padding: 4px 10px;
+  border-radius: 6px;
+  letter-spacing: 1px;
+}
+.classroom-detail-view { display: none; }
+.classroom-detail-view.active { display: block; }
+.progress-grid {
+  display: grid;
+  grid-template-columns: 150px repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+  margin-top: 16px;
+  overflow-x: auto;
+}
+.grid-header {
+  font-weight: 700;
+  font-size: 13px;
+  color: #6b7280;
+  padding: 8px;
+  text-align: center;
+}
+.grid-cell {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 8px;
+  text-align: center;
+  font-size: 13px;
+}
+.grid-cell.has-score {
+  background: #ecfdf5;
+  border-color: #10b981;
+  color: #065f46;
+  font-weight: 600;
+}
     </style>
   </head>
   <body>
@@ -956,6 +1033,7 @@ iframe.video-player,
         </div>
         <div id="headerRight" style="display: flex; align-items: center; gap: 10px">
           <button id="headerActivitiesBtn" class="secondary" onclick="openSavedExercises()">📚 My Activities</button>
+          <button id="headerClassroomsBtn" class="secondary" onclick="openClassrooms()">🏫 My Classrooms</button>
           <div id="authArea" style="display: flex; align-items: center; gap: 8px">
             <div id="gSignInBtn"></div>
             <div id="userInfo" style="display: none; align-items: center; gap: 8px">
@@ -1216,7 +1294,72 @@ iframe.video-player,
         <div id="savedList"><p style="color: #999">Loading…</p></div>
       </div>
     </div>
+<!-- Classroom Management overlay -->
+<div class="classroom-overlay" id="classroomOverlay">
+  <div class="classroom-modal">
+    <button class="help-close" onclick="closeClassrooms()">×</button>
+    
+    <!-- List View -->
+    <div id="classroomListView">
+      <h2>🏫 My Classrooms</h2>
+      <div style="margin-bottom: 16px;">
+        <button class="primary-blue" onclick="showCreateClassroomForm()">➕ Create New Classroom</button>
+      </div>
+      <div id="createClassroomForm" style="display: none; margin-bottom: 16px; padding: 16px; background: #f9fafb; border-radius: 8px;">
+        <label style="font-size: 14px; font-weight: 600;">Classroom Name</label>
+        <input type="text" id="newClassroomName" placeholder="e.g. Period 1 - Grade 5" style="margin-bottom: 12px;" />
+        <div style="display: flex; gap: 8px;">
+          <button class="success" onclick="createNewClassroom()">Create</button>
+          <button class="secondary" onclick="hideCreateClassroomForm()">Cancel</button>
+        </div>
+      </div>
+      <div id="classroomList"><p style="color: #999">Loading…</p></div>
+    </div>
 
+    <!-- Detail View -->
+    <div id="classroomDetailView" class="classroom-detail-view">
+      <button class="secondary" onclick="backToClassroomList()" style="margin-bottom: 16px;">⬅ Back to Classrooms</button>
+      <h2 id="detailClassName">Classroom Name</h2>
+      <div style="margin-bottom: 16px;">
+        Share this code with students: 
+        <span id="detailClassCode" class="classroom-code">------</span>
+        <button class="secondary" style="padding: 4px 10px; font-size: 13px;" onclick="copyClassroomCode()">📋 Copy</button>
+      </div>
+
+      <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px;">
+        <div style="flex: 1; min-width: 250px;">
+          <h3>👨‍🎓 Students</h3>
+          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+            <input type="text" id="newStudentName" placeholder="Student name" style="flex: 1;" />
+            <button class="success" onclick="addSingleStudent()">Add</button>
+          </div>
+          <details style="margin-bottom: 12px;">
+            <summary style="cursor: pointer; font-size: 13px; color: #4f46e5; font-weight: 600;">Add multiple students (bulk)</summary>
+            <textarea id="bulkStudentNames" placeholder="Paste names here, one per line" style="width: 100%; height: 80px; margin-top: 8px; padding: 8px; border-radius: 6px; border: 1px solid #d1d5db; box-sizing: border-box;"></textarea>
+            <button class="success" style="margin-top: 8px; width: 100%;" onclick="addBulkStudents()">Add All</button>
+          </details>
+          <div id="studentList" style="max-height: 200px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px;"></div>
+        </div>
+
+        <div style="flex: 1; min-width: 250px;">
+          <h3>📚 Assigned Activities</h3>
+          <div style="margin-bottom: 12px;">
+            <select id="activitySelect" style="width: 100%; margin-bottom: 8px;">
+              <option value="">Select an activity to assign...</option>
+            </select>
+            <button class="primary-blue" style="width: 100%;" onclick="assignActivityToClassroom()">Assign Activity</button>
+          </div>
+          <div id="assignedActivityList" style="max-height: 200px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px;"></div>
+        </div>
+      </div>
+
+      <h3>📊 Progress Grid</h3>
+      <div id="progressGridContainer" style="overflow-x: auto;">
+        <p style="color: #999;">Loading progress...</p>
+      </div>
+    </div>
+  </div>
+</div>
     <script>
       // ============================================================
       // 🌐 Global state
@@ -2386,6 +2529,271 @@ function createHtml5MediaPlayer(videoElement) {
 
     };
 
+}
+      // ── Classroom Management UI ─────────────────────────────────────────────
+let _currentClassroomId = null;
+let _currentClassroomActivities = [];
+let _allTeacherActivities = [];
+
+window.openClassrooms = async function() {
+  document.getElementById("classroomOverlay").classList.add("show");
+  backToClassroomList();
+  await loadClassroomList();
+};
+
+window.closeClassrooms = function() {
+  document.getElementById("classroomOverlay").classList.remove("show");
+};
+
+async function loadClassroomList() {
+  const list = document.getElementById("classroomList");
+  list.innerHTML = '<p style="color:#999;">Loading…</p>';
+  try {
+    const res = await fetch(WORKER + "/list-classrooms?teacherId=" + encodeURIComponent(getTeacherId()), { credentials: "include" });
+    if (!res.ok) throw new Error("Could not load classrooms");
+    const data = await res.json();
+    const classrooms = data.classrooms || [];
+    
+    if (!classrooms.length) {
+      list.innerHTML = '<p style="color:#999;text-align:center;padding:24px;">No classrooms yet. Create one to get started!</p>';
+      return;
+    }
+    
+    list.innerHTML = classrooms.map(c => `
+      <div class="classroom-item" onclick="openClassroomDetail('${c.id}', '${escapeHtml(c.name)}', '${c.code}')">
+        <div>
+          <div style="font-weight:700;font-size:16px;">${escapeHtml(c.name)}</div>
+          <div style="font-size:13px;color:#6b7280;">👨‍🎓 ${c.student_count} students · 📚 ${c.activity_count} activities</div>
+        </div>
+        <div class="classroom-code">${c.code}</div>
+      </div>
+    `).join("");
+  } catch (e) {
+    list.innerHTML = '<p style="color:#991b1b;">❌ ' + e.message + "</p>";
+  }
+}
+
+window.showCreateClassroomForm = function() {
+  document.getElementById("createClassroomForm").style.display = "block";
+};
+window.hideCreateClassroomForm = function() {
+  document.getElementById("createClassroomForm").style.display = "none";
+  document.getElementById("newClassroomName").value = "";
+};
+
+window.createNewClassroom = async function() {
+  const name = document.getElementById("newClassroomName").value.trim();
+  if (!name) return alert("Please enter a classroom name");
+  
+  const btn = event.target;
+  btn.disabled = true;
+  btn.innerText = "Creating...";
+  
+  try {
+    const res = await fetch(WORKER + "/create-classroom", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ name, teacherId: getTeacherId() })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to create");
+    
+    hideCreateClassroomForm();
+    await loadClassroomList();
+    showSuccessToast("✅ Classroom created! Code: " + data.code);
+  } catch (e) {
+    alert("❌ " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerText = "Create";
+  }
+};
+
+window.openClassroomDetail = async function(classroomId, name, code) {
+  _currentClassroomId = classroomId;
+  document.getElementById("classroomListView").style.display = "none";
+  document.getElementById("classroomDetailView").classList.add("active");
+  document.getElementById("detailClassName").innerText = name;
+  document.getElementById("detailClassCode").innerText = code;
+  await loadClassroomDetails();
+};
+
+window.backToClassroomList = function() {
+  _currentClassroomId = null;
+  document.getElementById("classroomDetailView").classList.remove("active");
+  document.getElementById("classroomListView").style.display = "block";
+  loadClassroomList();
+};
+
+window.copyClassroomCode = function() {
+  const code = document.getElementById("detailClassCode").innerText;
+  navigator.clipboard.writeText(code).then(() => showSuccessToast("✅ Code copied!"));
+};
+
+async function loadClassroomDetails() {
+  if (!_currentClassroomId) return;
+  try {
+    const res = await fetch(WORKER + "/classroom-progress?classroomId=" + _currentClassroomId + "&teacherId=" + encodeURIComponent(getTeacherId()), { credentials: "include" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    
+    // Render students
+    const studentList = document.getElementById("studentList");
+    if (data.students && data.students.length > 0) {
+      studentList.innerHTML = data.students.map(s => `
+        <div style="padding:6px 8px;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;">
+          <span>${escapeHtml(s.name)}</span>
+        </div>
+      `).join("");
+    } else {
+      studentList.innerHTML = '<p style="color:#999;font-size:13px;text-align:center;">No students yet.</p>';
+    }
+    
+    // Render assigned activities
+    _currentClassroomActivities = data.activities || [];
+    const assignedList = document.getElementById("assignedActivityList");
+    if (_currentClassroomActivities.length > 0) {
+      assignedList.innerHTML = _currentClassroomActivities.map(a => `
+        <div style="padding:6px 8px;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:13px;">${escapeHtml(a.name || "Untitled")}</span>
+          <button class="danger" style="padding:2px 8px;font-size:11px;" onclick="unassignActivity('${a.activity_id}')">Remove</button>
+        </div>
+      `).join("");
+    } else {
+      assignedList.innerHTML = '<p style="color:#999;font-size:13px;text-align:center;">No activities assigned.</p>';
+    }
+    
+    // Render progress grid
+    renderProgressGrid(data.students, data.activities, data.attempts);
+    await loadActivitiesForDropdown(); // Refresh dropdown after loading details
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function loadActivitiesForDropdown() {
+  try {
+    const res = await fetch(WORKER + "/list-teacher-exercises?teacherId=" + encodeURIComponent(getTeacherId()), { credentials: "include" });
+    const data = await res.json();
+    _allTeacherActivities = data.exercises || [];
+    
+    const select = document.getElementById("activitySelect");
+    select.innerHTML = '<option value="">Select an activity to assign...</option>';
+    
+    const assignedIds = new Set(_currentClassroomActivities.map(a => a.activity_id));
+    const available = _allTeacherActivities.filter(a => !assignedIds.has(a.exerciseId));
+    
+    available.forEach(a => {
+      const opt = document.createElement("option");
+      opt.value = a.exerciseId;
+      opt.innerText = a.name || "Untitled";
+      select.appendChild(opt);
+    });
+  } catch (e) {
+    console.error("Failed to load activities", e);
+  }
+}
+
+window.addSingleStudent = async function() {
+  const name = document.getElementById("newStudentName").value.trim();
+  if (!name) return;
+  await addStudentsToClassroom([name]);
+  document.getElementById("newStudentName").value = "";
+};
+
+window.addBulkStudents = async function() {
+  const text = document.getElementById("bulkStudentNames").value.trim();
+  if (!text) return;
+  const names = text.split('\n').map(n => n.trim()).filter(n => n.length > 0);
+  await addStudentsToClassroom(names);
+  document.getElementById("bulkStudentNames").value = "";
+};
+
+async function addStudentsToClassroom(names) {
+  try {
+    const res = await fetch(WORKER + "/add-students-bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ classroomId: _currentClassroomId, names, teacherId: getTeacherId() })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    showSuccessToast(`✅ Added ${data.added} student(s)`);
+    await loadClassroomDetails();
+  } catch (e) {
+    alert("❌ " + e.message);
+  }
+}
+
+window.assignActivityToClassroom = async function() {
+  const activityId = document.getElementById("activitySelect").value;
+  if (!activityId) return;
+  
+  try {
+    const res = await fetch(WORKER + "/assign-activity", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ classroomId: _currentClassroomId, activityId, teacherId: getTeacherId() })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    showSuccessToast("✅ Activity assigned!");
+    await loadClassroomDetails();
+  } catch (e) {
+    alert("❌ " + e.message);
+  }
+};
+
+window.unassignActivity = async function(activityId) {
+  if (!confirm("Remove this activity from the classroom?")) return;
+  try {
+    const res = await fetch(WORKER + "/unassign-activity", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ classroomId: _currentClassroomId, activityId, teacherId: getTeacherId() })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    await loadClassroomDetails();
+  } catch (e) {
+    alert("❌ " + e.message);
+  }
+};
+
+function renderProgressGrid(students, activities, attempts) {
+  const container = document.getElementById("progressGridContainer");
+  if (!students || students.length === 0 || !activities || activities.length === 0) {
+    container.innerHTML = '<p style="color:#999;text-align:center;padding:16px;">Add students and assign activities to see the progress grid.</p>';
+    return;
+  }
+  
+  let html = '<div class="progress-grid">';
+  html += '<div class="grid-header" style="text-align:left;">Student</div>';
+  activities.forEach(a => {
+    const shortName = (a.name || 'Untitled').substring(0, 15);
+    html += `<div class="grid-header" title="${escapeHtml(a.name || 'Untitled')}">${escapeHtml(shortName)}${(a.name||'').length>15?'...':''}</div>`;
+  });
+  
+  students.forEach(s => {
+    html += `<div class="grid-cell" style="text-align:left;font-weight:600;">${escapeHtml(s.name)}</div>`;
+    activities.forEach(a => {
+      const studentAttempts = (attempts || []).filter(att => att.student_id === s.id && att.activity_id === a.activity_id);
+      const latest = studentAttempts.length > 0 ? studentAttempts[0] : null;
+      
+      if (latest) {
+        html += `<div class="grid-cell has-score" title="Attempt ${latest.attempt_number}: ${latest.correct_answers}/${latest.total_questions}">${latest.score_percent}%</div>`;
+      } else {
+        html += `<div class="grid-cell" style="color:#d1d5db;">-</div>`;
+      }
+    });
+  });
+  
+  html += '</div>';
+  container.innerHTML = html;
 }
     </script>
 
