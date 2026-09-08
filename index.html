@@ -3275,69 +3275,7 @@ function studentLogout() {
   document.querySelector("#studentLoginView h1").innerText = "🎧 Join Classroom";
 }
 
-// ════════════════════════════════════════════════════
-// OVERRIDE showFinalScore TO SUBMIT ATTEMPTS
-// ════════════════════════════════════════════════════
-const _originalShowFinalScore = showFinalScore;
-showFinalScore = async function() {
-  clearInterval(studentState.stopTimer);
-  studentState.finished = true;
-  
-  let correct = 0, total = 0;
-  studentState.lesson.sentences.forEach((s, si) => {
-    s.words.forEach((w, wi) => {
-      if (w.isGap) {
-        total++;
-        if (studentState.results[si + "_" + wi]) correct++;
-      }
-    });
-  });
-  
-  const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
-  
-  // If this is a classroom activity, submit the score to the worker
-  if (studentState.isClassroomActivity && studentState.token && studentState.activityId) {
-    const statusEl = document.getElementById("studentStatus");
-    if (statusEl) statusEl.innerText = "⏳ Saving your score...";
-    
-    try {
-      await fetch(WORKER + "/submit-attempt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token: studentState.token,
-          activityId: studentState.activityId,
-          correctAnswers: correct,
-          totalQuestions: total,
-          scorePercent: pct
-        })
-      });
-    } catch (e) {
-      console.error("Failed to submit attempt:", e);
-    }
-  }
-  
-  // Render the final score card
-  const studentCard = document.getElementById("studentCard");
-  const backBtn = studentState.isClassroomActivity 
-    ? '<button class="success" onclick="backToStudentDashboard()" style="margin-top:12px;">🏫 Back to Dashboard</button>'
-    : '<button class="success" onclick="showAnswers()">👁 Show answers</button>';
-    
-  studentCard.innerHTML =
-    '<div class="score-card">' +
-    "<h2>🎉 Finished!</h2>" +
-    '<div class="score-big">' + pct + "%</div>" +
-    "<p><strong>" + correct + " out of " + total + "</strong> correct</p>" +
-    '<button class="primary-blue" onclick="restartLesson()">🔁 Try again</button>' +
-    backBtn +
-    '<div id="answersReview" style="margin-top:24px;text-align:left;display:none;"></div>' +
-    "</div>";
-    
-  // Auto-show answers for classroom activities so they can learn
-  if (studentState.isClassroomActivity) {
-    showAnswers();
-  }
-};
+
     </script>
 
     <script>
