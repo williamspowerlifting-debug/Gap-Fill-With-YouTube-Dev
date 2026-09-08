@@ -2644,6 +2644,8 @@ function createHtml5MediaPlayer(videoElement) {
       // ── Classroom Management UI ─────────────────────────────────────────────
 let _currentClassroomId = null;
 let _currentClassroomActivities = [];
+let _selectedProgressActivityId = null;
+let _classroomProgressData = null;
 let _allTeacherActivities = [];
 
 window.openClassrooms = async function() {
@@ -2722,12 +2724,14 @@ window.createNewClassroom = async function() {
 };
 
 window.openClassroomDetail = async function(classroomId, name, code) {
-  _currentClassroomId = classroomId;
-  document.getElementById("classroomListView").style.display = "none";
-  document.getElementById("classroomDetailView").classList.add("active");
-  document.getElementById("detailClassName").innerText = name;
-  document.getElementById("detailClassCode").innerText = code;
-  await loadClassroomDetails();
+_currentClassroomId = classroomId;
+_selectedProgressActivityId = null;
+_classroomProgressData = null;
+document.getElementById("classroomListView").style.display = "none";
+document.getElementById("classroomDetailView").classList.add("active");
+document.getElementById("detailClassName").innerText = name;
+document.getElementById("detailClassCode").innerText = code;
+await loadClassroomDetails();
 };
 
 window.backToClassroomList = function() {
@@ -2743,44 +2747,42 @@ window.copyClassroomCode = function() {
 };
 
 async function loadClassroomDetails() {
-  if (!_currentClassroomId) return;
-  try {
-    const res = await fetch(WORKER + "/classroom-progress?classroomId=" + _currentClassroomId + "&teacherId=" + encodeURIComponent(getTeacherId()), { credentials: "include" });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-    
-    // Render students
-    const studentList = document.getElementById("studentList");
-    if (data.students && data.students.length > 0) {
-      studentList.innerHTML = data.students.map(s => `
-        <div style="padding:6px 8px;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;">
-          <span>${escapeHtml(s.name)}</span>
-        </div>
-      `).join("");
-    } else {
-      studentList.innerHTML = '<p style="color:#999;font-size:13px;text-align:center;">No students yet.</p>';
-    }
-    
-    // Render assigned activities
-    _currentClassroomActivities = data.activities || [];
-    const assignedList = document.getElementById("assignedActivityList");
-    if (_currentClassroomActivities.length > 0) {
-      assignedList.innerHTML = _currentClassroomActivities.map(a => `
-        <div style="padding:6px 8px;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;">
-          <span style="font-size:13px;">${escapeHtml(a.name || "Untitled")}</span>
-          <button class="danger" style="padding:2px 8px;font-size:11px;" onclick="unassignActivity('${a.activity_id}')">Remove</button>
-        </div>
-      `).join("");
-    } else {
-      assignedList.innerHTML = '<p style="color:#999;font-size:13px;text-align:center;">No activities assigned.</p>';
-    }
-    
-    // Render progress grid
-    renderProgressGrid(data.students, data.activities, data.attempts);
-    await loadActivitiesForDropdown(); // Refresh dropdown after loading details
-  } catch (e) {
-    console.error(e);
-  }
+if (!_currentClassroomId) return;
+try {
+const res = await fetch(WORKER + "/classroom-progress?classroomId=" + _currentClassroomId + "&teacherId=" + encodeURIComponent(getTeacherId()), { credentials: "include" });
+const data = await res.json();
+if (!res.ok) throw new Error(data.error);
+// Render students
+const studentList = document.getElementById("studentList");
+if (data.students && data.students.length > 0) {
+studentList.innerHTML = data.students.map(s => `
+<div style="padding:6px 8px;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;">
+<span>${escapeHtml(s.name)}</span>
+</div>
+`).join("");
+} else {
+studentList.innerHTML = '<p style="color:#999;font-size:13px;text-align:center;">No students yet.</p>';
+}
+// Render assigned activities
+_currentClassroomActivities = data.activities || [];
+const assignedList = document.getElementById("assignedActivityList");
+if (_currentClassroomActivities.length > 0) {
+assignedList.innerHTML = _currentClassroomActivities.map(a => `
+<div style="padding:6px 8px;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;">
+<span style="font-size:13px;">${escapeHtml(a.name || "Untitled")}</span>
+<button class="danger" style="padding:2px 8px;font-size:11px;" onclick="unassignActivity('${a.activity_id}')">Remove</button>
+</div>
+`).join("");
+} else {
+assignedList.innerHTML = '<p style="color:#999;font-size:13px;text-align:center;">No activities assigned.</p>';
+}
+// Cache progress data and render grid
+_classroomProgressData = { students: data.students, activities: data.activities, attempts: data.attempts };
+renderProgressGrid(data.students, data.activities, data.attempts);
+await loadActivitiesForDropdown(); // Refresh dropdown after loading details
+} catch (e) {
+console.error(e);
+}
 }
 
 async function loadActivitiesForDropdown() {
@@ -2876,51 +2878,104 @@ window.unassignActivity = async function(activityId) {
 };
 
 function renderProgressGrid(students, activities, attempts) {
-  const container = document.getElementById("progressGridContainer");
-  if (!students || students.length === 0 || !activities || activities.length === 0) {
-    container.innerHTML = '<p style="color:#999;text-align:center;padding:16px;">Add students and assign activities to see the progress grid.</p>';
-    return;
-  }
-  
-  let html = '<div class="progress-grid">';
-  html += '<div class="grid-header" style="text-align:left;">Student</div>';
-  activities.forEach(a => {
-    const shortName = (a.name || 'Untitled').substring(0, 15);
-    html += `<div class="grid-header" title="${escapeHtml(a.name || 'Untitled')}">${escapeHtml(shortName)}${(a.name||'').length>15?'...':''}</div>`;
-  });
-  
-  students.forEach(s => {
-    html += `<div class="grid-cell" style="text-align:left;font-weight:600;">${escapeHtml(s.name)}</div>`;
-    activities.forEach(a => {
-      // Keep EVERY attempt for this student/activity. The Worker already stores
-      // each attempt as a separate row with an incrementing attempt_number.
-      const studentAttempts = (attempts || [])
-        .filter(att => att.student_id === s.id && att.activity_id === a.activity_id)
-        .sort((x, y) => Number(x.attempt_number || 0) - Number(y.attempt_number || 0));
-
-      if (studentAttempts.length > 0) {
-        const attemptCount = studentAttempts.length;
-        const attemptLabel = attemptCount === 1 ? '1 attempt' : `${attemptCount} attempts`;
-        const scoreList = studentAttempts
-          .map(att => `#${att.attempt_number}: ${att.score_percent}%`)
-          .join(' · ');
-        const detailList = studentAttempts
-          .map(att => `Attempt ${att.attempt_number}: ${att.correct_answers}/${att.total_questions} (${att.score_percent}%)`)
-          .join('\n');
-
-        html += `<div class="grid-cell has-score" title="${escapeHtml(detailList)}">
-          <div style="font-weight:700;">${attemptLabel}</div>
-          <div style="font-size:11px;line-height:1.4;margin-top:3px;">${escapeHtml(scoreList)}</div>
-        </div>`;
-      } else {
-        html += `<div class="grid-cell" style="color:#d1d5db;">-</div>`;
-      }
-    });
-  });
-  
-  html += '</div>';
-  container.innerHTML = html;
+const container = document.getElementById("progressGridContainer");
+if (!students || students.length === 0 || !activities || activities.length === 0) {
+container.innerHTML = '<p style="color:#999;text-align:center;padding:16px;">Add students and assign activities to see the progress grid.</p>';
+return;
 }
+
+// Auto-select first activity if none selected or if selected activity no longer exists
+if (!_selectedProgressActivityId || !activities.find(a => a.activity_id === _selectedProgressActivityId)) {
+_selectedProgressActivityId = activities[0].activity_id;
+}
+
+// Activity selector tabs
+let html = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">';
+html += '<span style="font-size:13px;color:#6b7280;font-weight:600;margin-right:4px;">View:</span>';
+activities.forEach(a => {
+const isActive = a.activity_id === _selectedProgressActivityId;
+html += `<button class="tag-btn ${isActive ? 'active' : ''}" 
+onclick="selectProgressActivity('${a.activity_id}')" 
+style="font-size:13px;padding:6px 14px;">
+${escapeHtml(a.name || 'Untitled')}
+</button>`;
+});
+html += '</div>';
+
+// Find selected activity
+const selectedActivity = activities.find(a => a.activity_id === _selectedProgressActivityId);
+if (!selectedActivity) {
+container.innerHTML = html + '<p style="color:#999;">Select an activity to view progress.</p>';
+return;
+}
+
+// Determine max attempts across all students for this activity
+const maxAttempts = students.reduce((max, s) => {
+const count = (attempts || []).filter(att => att.student_id === s.id && att.activity_id === _selectedProgressActivityId).length;
+return Math.max(max, count);
+}, 0);
+
+// Build table
+html += '<div style="overflow-x:auto;border:1px solid #e5e7eb;border-radius:8px;">';
+html += '<table style="width:100%;border-collapse:collapse;font-size:14px;background:white;">';
+
+// Header
+html += '<thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">';
+html += '<th style="padding:12px;text-align:left;font-weight:700;color:#374151;position:sticky;left:0;background:#f9fafb;z-index:1;min-width:140px;">Student</th>';
+html += '<th style="padding:12px;text-align:center;font-weight:700;color:#374151;min-width:90px;">Attempts</th>';
+for (let i = 1; i <= maxAttempts; i++) {
+html += `<th style="padding:12px;text-align:center;font-weight:700;color:#374151;min-width:100px;">Attempt ${i}</th>`;
+}
+html += '<th style="padding:12px;text-align:center;font-weight:700;color:#374151;min-width:100px;background:#f0fdf4;">Best</th>';
+html += '</tr></thead><tbody>';
+
+// Rows
+students.forEach((s, rowIdx) => {
+const studentAttempts = (attempts || [])
+.filter(att => att.student_id === s.id && att.activity_id === _selectedProgressActivityId)
+.sort((x, y) => Number(x.attempt_number || 0) - Number(y.attempt_number || 0));
+
+const rowBg = rowIdx % 2 === 0 ? 'white' : '#fafafa';
+html += `<tr style="border-bottom:1px solid #f3f4f6;background:${rowBg};">`;
+html += `<td style="padding:12px;font-weight:600;color:#111;position:sticky;left:0;background:${rowBg};z-index:1;">${escapeHtml(s.name)}</td>`;
+
+if (studentAttempts.length === 0) {
+html += '<td style="padding:12px;text-align:center;color:#9ca3af;">0</td>';
+for (let i = 0; i < maxAttempts; i++) {
+html += '<td style="padding:12px;text-align:center;color:#d1d5db;">—</td>';
+}
+html += '<td style="padding:12px;text-align:center;color:#d1d5db;background:#f0fdf4;">—</td>';
+} else {
+html += `<td style="padding:12px;text-align:center;font-weight:600;color:#4f46e5;">${studentAttempts.length}</td>`;
+for (let i = 1; i <= maxAttempts; i++) {
+const attempt = studentAttempts.find(a => Number(a.attempt_number) === i);
+if (attempt) {
+const scoreColor = attempt.score_percent >= 80 ? '#10b981' : attempt.score_percent >= 50 ? '#f59e0b' : '#ef4444';
+html += `<td style="padding:12px;text-align:center;">
+<div style="font-weight:700;color:${scoreColor};font-size:15px;">${attempt.score_percent}%</div>
+<div style="font-size:11px;color:#6b7280;margin-top:2px;">${attempt.correct_answers}/${attempt.total_questions}</div>
+</td>`;
+} else {
+html += '<td style="padding:12px;text-align:center;color:#d1d5db;">—</td>';
+}
+}
+const bestScore = Math.max(...studentAttempts.map(a => a.score_percent));
+const bestColor = bestScore >= 80 ? '#10b981' : bestScore >= 50 ? '#f59e0b' : '#ef4444';
+html += `<td style="padding:12px;text-align:center;font-weight:700;color:${bestColor};font-size:15px;background:#f0fdf4;">${bestScore}%</td>`;
+}
+html += '</tr>';
+});
+
+html += '</tbody></table></div>';
+container.innerHTML = html;
+}
+
+window.selectProgressActivity = function(activityId) {
+_selectedProgressActivityId = activityId;
+if (_classroomProgressData) {
+renderProgressGrid(_classroomProgressData.students, _classroomProgressData.activities, _classroomProgressData.attempts);
+}
+};
       // ════════════════════════════════════════════════════
 // 🎓 STUDENT CLASSROOM FLOW (Phase 3)
 // ════════════════════════════════════════════════════
