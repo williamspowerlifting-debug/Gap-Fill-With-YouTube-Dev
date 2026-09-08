@@ -5038,37 +5038,56 @@ if (nextSection >= 0) {
       }
 
       function showFinalScore() {
-        clearInterval(studentState.stopTimer);
-        studentState.finished = true;
-        let correct = 0,
-          total = 0;
-        studentState.lesson.sentences.forEach((s, si) => {
-          s.words.forEach((w, wi) => {
-            if (w.isGap) {
-              total++;
-              if (studentState.results[si + "_" + wi]) correct++;
-            }
-          });
-        });
-        const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
-        const studentCard = document.getElementById("studentCard");
-        studentCard.innerHTML =
-          '<div class="score-card">' +
-          "<h2>🎉 Finished!</h2>" +
-          '<div class="score-big">' +
-          pct +
-          "%</div>" +
-          "<p><strong>" +
-          correct +
-          " out of " +
-          total +
-          "</strong> correct</p>" +
-          '<button class="primary-blue" onclick="restartLesson()">🔁 Try again</button>' +
-          '<button class="success" onclick="showAnswers()">👁 Show answers</button>' +
-          '<div id="answersReview" style="margin-top:24px;text-align:left;display:none;"></div>' +
-          "</div>";
+  clearInterval(studentState.stopTimer);
+  studentState.finished = true;
+  let correct = 0, total = 0;
+  studentState.lesson.sentences.forEach((s, si) => {
+    s.words.forEach((w, wi) => {
+      if (w.isGap) {
+        total++;
+        if (studentState.results[si + "_" + wi]) correct++;
       }
-
+    });
+  });
+  const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
+  
+  // 🎓 NEW: If this is a classroom activity, submit the score to the worker
+  if (studentState.isClassroomActivity && studentState.token && studentState.activityId) {
+    const statusEl = document.getElementById("studentStatus");
+    if (statusEl) statusEl.innerText = "⏳ Saving your score...";
+    
+    fetch(WORKER + "/submit-attempt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token: studentState.token,
+        activityId: studentState.activityId,
+        correctAnswers: correct,
+        totalQuestions: total,
+        scorePercent: pct
+      })
+    }).catch(e => console.error("Failed to submit attempt:", e));
+  }
+  
+  const studentCard = document.getElementById("studentCard");
+  const backBtn = studentState.isClassroomActivity 
+    ? '<button class="success" onclick="backToStudentDashboard()" style="margin-top:12px;">🏫 Back to Dashboard</button>'
+    : '<button class="success" onclick="showAnswers()">👁 Show answers</button>';
+    
+  studentCard.innerHTML =
+    '<div class="score-card">' +
+    "<h2>🎉 Finished!</h2>" +
+    '<div class="score-big">' + pct + "%</div>" +
+    "<p><strong>" + correct + " out of " + total + "</strong> correct</p>" +
+    '<button class="primary-blue" onclick="restartLesson()">🔁 Try again</button>' +
+    backBtn +
+    '<div id="answersReview" style="margin-top:24px;text-align:left;display:none;"></div>' +
+    "</div>";
+    
+  if (studentState.isClassroomActivity) {
+    showAnswers();
+  }
+}
       function restartLesson() {
         startStudent(studentState.lesson, studentState.isPreview);
       }
@@ -5108,31 +5127,328 @@ if (nextSection >= 0) {
       // ============================================================
       // 🔁 Routing — student vs builder
       // ============================================================
-      (function () {
-        (async () => {
-          const params = new URLSearchParams(location.search);
-          const shortId = params.get("id");
-          const rawData = params.get("data");
+      // ============================================================
+// 🔁 UNIFIED ROUTING (Legacy + Classroom)
+// ============================================================
+(function () {
+  (async () => {
+    const params = new URLSearchParams(location.search);
+    const classCode = params.get("class");
+    const token = params.get("token");
+    const shortId = params.get("id");
+    const rawData = params.get("data");
 
-          if (shortId) {
-            document.getElementById("app").innerHTML = '<div class="card"><p>⏳ Loading lesson…</p></div>';
-            try {
-              const res = await fetch(WORKER + "/load-lesson?id=" + encodeURIComponent(shortId));
-              if (!res.ok) throw new Error("Lesson not found (ID: " + shortId + ")");
-              const lesson = await res.json();
-              startStudent(lesson);
-            } catch (e) {
-              document.getElementById("app").innerHTML = '<div class="card"><h2>⚠️ ' + e.message + "</h2></div>";
-            }
-          } else if (rawData) {
-            try {
-              const json = LZString.decompressFromEncodedURIComponent(rawData) || rawData;
-              startStudent(JSON.parse(json));
-            } catch (e) {
-              document.getElementById("app").innerHTML = '<div class="card"><h2>⚠️ Invalid lesson link.</h2></div>';
-            }
-          }
-        })();
+    // 1. Classroom Dashboard (Logged in student)
+    if (token) {
+      _currentStudentToken = token;
+      document.getElementById("app").style.display = "none";
+      document.getElementById("studentLoginView").style.display = "none";
+      document.getElementById("studentDashboardView").style.display = "block";
+      await renderStudentDashboard(token);
+      return;
+    }
+
+    // 2. Classroom Login (Has code)
+    if (classCode) {
+      document.getElementById("app").style.display = "none";
+      document.getElementById("studentLoginView").style.display = "block";
+      document.getElementById("studentClassCodeInput").value = classCode.toUpperCase();
+      await fetchClassroomForLogin(classCode.toUpperCase());
+      return;
+    }
+
+    // 3. Legacy Student Link (?id=...)
+    if (shortId) {
+      document.getElementById("app").innerHTML = '<div class="card"><p>⏳ Loading lesson…</p></div>';
+      try {
+        const res = await fetch(WORKER + "/load-lesson?id=" + encodeURIComponent(shortId));
+        if (!res.ok) throw new Error("Lesson not found (ID: " + shortId + ")");
+        const lesson = await res.json();
+        startStudent(lesson);
+      } catch (e) {
+        document.getElementById("app").innerHTML = '<div class="card"><h2>⚠️ ' + e.message + "</h2></div>";
+      }
+      return;
+    }
+
+    // 4. Legacy Compressed Data Link (?data=...)
+    if (rawData) {
+      try {
+        const json = LZString.decompressFromEncodedURIComponent(rawData) || rawData;
+        startStudent(JSON.parse(json));
+      } catch (e) {
+        document.getElementById("app").innerHTML = '<div class="card"><h2>⚠️ Invalid lesson link.</h2></div>';
+      }
+      return;
+    }
+  })();
+})();
+
+// ============================================================
+// 🎓 CLASSROOM HELPERS
+// ============================================================
+let _currentStudentToken = null;
+let _currentStudentActivityId = null;
+
+async function fetchClassroomForLogin(code) {
+  const status = document.getElementById("studentLoginStatus");
+  const nameSelectDiv = document.getElementById("studentNameSelection");
+  const select = document.getElementById("studentNameSelect");
+  
+  status.innerText = "⏳ Finding classroom...";
+  nameSelectDiv.style.display = "none";
+  
+  try {
+    const res = await fetch(WORKER + "/get-classroom-by-code", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      status.className = "status error";
+      status.innerText = "❌ " + (data.error || "Classroom not found");
+      return;
+    }
+    
+    document.querySelector("#studentLoginView h1").innerText = "🎧 " + data.classroomName;
+    select.innerHTML = '<option value="">-- Choose your name --</option>';
+    (data.students || []).forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s.id;
+      opt.innerText = s.name;
+      select.appendChild(opt);
+    });
+    
+    nameSelectDiv.style.display = "block";
+    status.innerText = "";
+  } catch (e) {
+    status.className = "status error";
+    status.innerText = "❌ Network error. Please try again.";
+  }
+}
+
+document.getElementById("studentClassCodeInput").addEventListener("input", function(e) {
+  const code = e.target.value.trim().toUpperCase();
+  if (code.length === 6) {
+    fetchClassroomForLogin(code);
+  } else {
+    document.getElementById("studentNameSelection").style.display = "none";
+    document.getElementById("studentLoginStatus").innerText = "";
+  }
+});
+
+async function handleStudentLogin() {
+  const code = document.getElementById("studentClassCodeInput").value.trim().toUpperCase();
+  const studentId = document.getElementById("studentNameSelect").value;
+  const status = document.getElementById("studentLoginStatus");
+  
+  if (!studentId) {
+    status.className = "status error";
+    status.innerText = "❌ Please select your name.";
+    return;
+  }
+  
+  status.className = "status";
+  status.innerText = "⏳ Joining...";
+  
+  try {
+    let classroomId = window._tempClassroomId;
+    if (!classroomId) {
+      const res = await fetch(WORKER + "/get-classroom-by-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code })
+      });
+      const data = await res.json();
+      classroomId = data.classroomId;
+      window._tempClassroomId = classroomId;
+    }
+
+    const res = await fetch(WORKER + "/student-login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ classroomId, studentId })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Login failed");
+    
+    _currentStudentToken = data.token;
+    history.replaceState(null, "", "?token=" + encodeURIComponent(data.token));
+    
+    document.getElementById("studentLoginView").style.display = "none";
+    document.getElementById("studentDashboardView").style.display = "block";
+    await renderStudentDashboard(data.token);
+  } catch (e) {
+    status.className = "status error";
+    status.innerText = "❌ " + e.message;
+  }
+}
+
+async function renderStudentDashboard(token) {
+  const list = document.getElementById("studentActivityList");
+  list.innerHTML = '<p style="color:#999;text-align:center;padding:24px;">Loading...</p>';
+  
+  try {
+    const res = await fetch(WORKER + "/student-dashboard?token=" + encodeURIComponent(token));
+    const data = await res.json();
+    if (!res.ok) {
+      if (res.status === 401) {
+        studentLogout();
+        return;
+      }
+      throw new Error(data.error || "Failed to load dashboard");
+    }
+    
+    document.getElementById("dashboardStudentName").innerText = "Welcome, " + (data.name || "Student") + "!";
+    document.getElementById("dashboardClassName").innerText = "Your Classroom";
+    
+    if (!data.activities || data.activities.length === 0) {
+      list.innerHTML = '<p style="color:#999;text-align:center;padding:24px;">No activities assigned yet. Check back soon!</p>';
+      return;
+    }
+    
+    const attemptsByActivity = {};
+    (data.attempts || []).forEach(att => {
+      if (!attemptsByActivity[att.activity_id]) {
+        attemptsByActivity[att.activity_id] = { bestScore: 0, totalAttempts: 0 };
+      }
+      attemptsByActivity[att.activity_id].totalAttempts++;
+      if (att.score_percent > attemptsByActivity[att.activity_id].bestScore) {
+        attemptsByActivity[att.activity_id].bestScore = att.score_percent;
+      }
+    });
+    
+    list.innerHTML = data.activities.map(a => {
+      const stats = attemptsByActivity[a.activity_id] || { bestScore: 0, totalAttempts: 0 };
+      const hasAttempts = stats.totalAttempts > 0;
+      
+      return `
+        <div class="activity-list-item">
+          <div class="activity-info">
+            <h3>${escapeHtml(a.name || "Untitled Activity")}</h3>
+            <div class="activity-meta">
+              <span>📝 ${stats.totalAttempts} attempt${stats.totalAttempts !== 1 ? 's' : ''}</span>
+              <span class="score-badge ${hasAttempts ? '' : 'none'}">
+                ${hasAttempts ? '🏆 Best: ' + stats.bestScore + '%' : 'Not started'}
+              </span>
+            </div>
+          </div>
+          <button class="primary-blue" style="padding: 10px 20px; font-size: 14px;" 
+            onclick="startClassroomActivity('${a.activity_id}', '${escapeAttr(a.name || "Untitled")}')">
+            ${hasAttempts ? 'Retry' : 'Start'}
+          </button>
+        </div>
+      `;
+    }).join("");
+    
+  } catch (e) {
+    list.innerHTML = '<p style="color:#991b1b;text-align:center;">❌ ' + e.message + '</p>';
+  }
+}
+
+async function startClassroomActivity(activityId, activityName) {
+  const token = _currentStudentToken;
+  if (!token) return studentLogout();
+  
+  _currentStudentActivityId = activityId;
+  
+  document.getElementById("studentDashboardView").style.display = "none";
+  const app = document.getElementById("studentApp");
+  app.style.display = "block";
+  app.innerHTML = '<div class="card" style="text-align:center;padding:40px;"><p>⏳ Loading activity...</p></div>';
+  
+  try {
+    const res = await fetch(WORKER + "/load-student-activity?token=" + encodeURIComponent(token) + "&activityId=" + encodeURIComponent(activityId));
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to load activity");
+    
+    startStudentForClassroom(data, activityName);
+  } catch (e) {
+    app.innerHTML = '<div class="card" style="text-align:center;padding:40px;"><h2>⚠️ ' + e.message + '</h2><button class="secondary" onclick="backToStudentDashboard()">Back to Dashboard</button></div>';
+  }
+}
+
+function startStudentForClassroom(lesson, activityName) {
+  const finalLesson = { 
+    videoUrl: lesson.videoUrl, 
+    videoMode: lesson.videoMode, 
+    youtubeVideoId: lesson.youtubeVideoId, 
+    youtubeTitle: lesson.youtubeTitle, 
+    sentences: groupSentencesForStudent(lesson.sentences) 
+  };
+  
+  studentState = {
+    lesson: finalLesson,
+    currentIdx: 0,
+    videoEl: null,
+    stopTimer: null,
+    answers: {},
+    results: {},
+    submittedSentences: {},
+    finished: false,
+    isPreview: false,
+    isClassroomActivity: true,
+    activityId: _currentStudentActivityId,
+    token: _currentStudentToken,
+    activityName: activityName,
+    autoAdvanceTimer: null,
+    autoAdvanceCountInterval: null,
+    cleanupMode: false,
+  };
+  
+  const app = document.getElementById("studentApp");
+  app.innerHTML = 
+    '<div style="margin-bottom:14px;">' +
+    '<button class="secondary" onclick="backToStudentDashboard()">⬅ Back to Dashboard</button>' +
+    '</div>' +
+    "<h1>🎧 " + escapeHtml(activityName) + "</h1>" +
+    buildStudentMarkup(finalLesson);
+    
+  studentState.videoEl = document.getElementById("studentVideo");
+  renderProgressDots();
+  
+  if (finalLesson.videoMode === "youtube" && finalLesson.youtubeVideoId) {
+    createYouTubeMediaPlayer("studentYoutubePlayer", finalLesson.youtubeVideoId).then(function (player) {
+      studentState.youtubePlayer = player;
+      loadSentence(0);
+    }).catch(function (err) {
+      console.error("YouTube player failed to load:", err);
+      const status = document.getElementById("studentStatus");
+      if (status) status.innerText = "❌ Could not load the YouTube player.";
+    });
+  } else {
+    loadSentence(0);
+  }
+}
+
+function backToStudentDashboard() {
+  if (studentState.youtubePlayer) {
+    try { studentState.youtubePlayer.pauseVideo(); } catch (e) {}
+  } else if (studentState.videoEl) {
+    try { studentState.videoEl.pause(); } catch (e) {}
+  }
+  clearInterval(studentState.stopTimer);
+  clearTimeout(studentState.autoAdvanceTimer);
+  clearInterval(studentState.autoAdvanceCountInterval);
+  
+  document.getElementById("studentApp").style.display = "none";
+  document.getElementById("studentDashboardView").style.display = "block";
+  renderStudentDashboard(_currentStudentToken);
+}
+
+function studentLogout() {
+  _currentStudentToken = null;
+  _currentStudentActivityId = null;
+  history.replaceState(null, "", location.pathname);
+  document.getElementById("studentDashboardView").style.display = "none";
+  document.getElementById("studentApp").style.display = "none";
+  document.getElementById("studentLoginView").style.display = "block";
+  document.getElementById("studentClassCodeInput").value = "";
+  document.getElementById("studentNameSelection").style.display = "none";
+  document.getElementById("studentLoginStatus").innerText = "";
+  document.querySelector("#studentLoginView h1").innerText = "🎧 Join Classroom";
+}
       })();
       // GLOBAL EVENT DELEGATION: Binds exactly once at the document level
       // This survives any future full innerHTML rewrites or edit updates
