@@ -3392,7 +3392,17 @@ function studentLogout() {
           const endTime = Number.isFinite(end) ? end : startTime + 5;
 
           return {
-            words: Array.isArray(s.words) ? [...s.words] : [],
+            words: Array.isArray(s.words)
+              ? s.words.map((w) => {
+                  if (typeof w === "object" && w !== null && "text" in w) {
+                    return { text: w.text, isGap: !!w.isGap };
+                  }
+                  if (typeof w === "object" && w !== null && "t" in w) {
+                    return { text: w.t, isGap: !!w.g };
+                  }
+                  return { text: String(w ?? ""), isGap: false };
+                })
+              : [],
             startTime,
             endTime: endTime >= startTime ? endTime : startTime + 5,
             sectionEnd: !!(s.sectionEnd || s.x),
