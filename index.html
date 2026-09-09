@@ -10,6 +10,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tus-js-client@4.3.1/dist/tus.min.js"></script>
     <script>
       window.WORKER_URL = "https://gapfill-ai-googledrive-dev.williamspowerlifting.workers.dev";
     </script>
@@ -2176,22 +2177,48 @@ iframe.video-player,
           }
 
           status.innerText = "⏳ Uploading " + file.name + "...";
+
+          // Upload directly from the browser to Bunny using TUS.
+          // The video bytes never pass through the Cloudflare Worker, so
+          // Cloudflare's 100 MB request-body limit is no longer involved.
+          if (!window.tus || !tus.Upload) {
+            throw new Error("Resumable upload library failed to load. Please refresh and try again.");
+          }
+
           await new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open("PUT", WORKER + "/upload-bunny-chunk?guid=" + bunnyGuid);
-            xhr.upload.onprogress = (e) => {
-              if (e.lengthComputable) {
-                const pct = Math.round((e.loaded / e.total) * 100);
+            const upload = new tus.Upload(file, {
+              endpoint: created.tusEndpoint || "https://video.bunnycdn.com/tusupload",
+              retryDelays: [0, 3000, 5000, 10000, 20000, 30000, 60000],
+              headers: {
+                AuthorizationSignature: created.authorizationSignature,
+                AuthorizationExpire: String(created.authorizationExpire),
+                VideoId: created.guid,
+                LibraryId: String(created.libraryId),
+              },
+              metadata: {
+                filename: file.name,
+                filetype: file.type || "video/mp4",
+                title: file.name,
+              },
+              onError: (error) => {
+                console.error("Bunny TUS upload error:", error);
+                reject(new Error(error && error.message ? error.message : "Upload failed"));
+              },
+              onProgress: (bytesUploaded, bytesTotal) => {
+                const pct = Math.round((bytesUploaded / bytesTotal) * 100);
                 progressBar.style.width = pct + "%";
                 progressBar.innerText = pct + "%";
+              },
+              onSuccess: () => resolve(),
+            });
+
+            // TUS can resume an interrupted upload without starting again.
+            upload.findPreviousUploads().then((previousUploads) => {
+              if (previousUploads.length) {
+                upload.resumeFromPreviousUpload(previousUploads[0]);
               }
-            };
-            xhr.onload = () => {
-              if (xhr.status >= 200 && xhr.status < 300) resolve();
-              else reject(new Error("Upload failed: " + xhr.status + " " + xhr.responseText));
-            };
-            xhr.onerror = () => reject(new Error("Network error"));
-            xhr.send(file);
+              upload.start();
+            }).catch(reject);
           });
 
           bunnyEmbedUrl = "https://iframe.mediadelivery.net/embed/" + created.libraryId + "/" + bunnyGuid;
