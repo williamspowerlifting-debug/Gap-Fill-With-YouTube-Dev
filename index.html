@@ -2254,34 +2254,50 @@ iframe.video-player,
         const status = document.getElementById("transcribeStatus");
         status.className = "status";
         status.innerText = "⏳ Waiting for video to be ready...";
-        for (let i = 0; i < 150; i++) {
-          await new Promise((r) => setTimeout(r, 2000));
-          try {
-            const res = await fetch(WORKER + "/bunny-status?guid=" + bunnyGuid);
-            const data = await res.json();
-            if (data.failed)
-              throw new Error("Bunny encoding failed. Check MP4 Fallback is enabled in your Bunny library.");
-            if (data.done && data.cdnUrl) {
-              bunnyDirectUrl = data.cdnUrl;
-              const box = document.getElementById("videoBox");
-              box.innerHTML =
-                '<video id="builderPlayer" class="video-player" controls crossorigin="anonymous"><source src="' +
-                bunnyDirectUrl +
-                '" type="video/mp4"></video>';
-              builderPlayer = document.getElementById("builderPlayer");
-              mediaPlayer = createHtml5MediaPlayer(builderPlayer);
-              return;
-            }
-            const encode = data.encodeProgress || 0;
 
-            status.innerText = "⏳ Video processing... (" + encode + "%)";
+        // Bunny can briefly report status 0/1 immediately after a TUS upload
+        // while the uploaded asset is being handed over to the encoder.
+        // The Worker therefore also checks the actual 360p CDN file.
+        // Give large videos plenty of time, but never leave the UI hanging forever.
+        for (let i = 0; i < 450; i++) {
+          await new Promise((r) => setTimeout(r, i === 0 ? 0 : 2000));
 
-            setExerciseProgress(30 + Math.round(encode * 0.4), "Processing video...");
-          } catch (e) {
-            if (e.message && e.message.indexOf("encoding failed") >= 0) throw e;
+          const res = await fetch(WORKER + "/bunny-status?guid=" + encodeURIComponent(bunnyGuid));
+          const data = await res.json().catch(() => ({}));
+
+          if (!res.ok) {
+            throw new Error(data.error || ("Bunny status check failed (HTTP " + res.status + ")"));
           }
+
+          if (data.failed) {
+            throw new Error(data.error || "Bunny encoding failed. Check MP4 Fallback is enabled in your Bunny library.");
+          }
+
+          if (data.done && data.cdnUrl) {
+            bunnyDirectUrl = data.cdnUrl;
+            const box = document.getElementById("videoBox");
+            box.innerHTML =
+              '<video id="builderPlayer" class="video-player" controls crossorigin="anonymous"><source src="' +
+              bunnyDirectUrl +
+              '" type="video/mp4"></video>';
+            builderPlayer = document.getElementById("builderPlayer");
+            mediaPlayer = createHtml5MediaPlayer(builderPlayer);
+            return;
+          }
+
+          const encode = Number.isFinite(Number(data.encodeProgress)) ? Number(data.encodeProgress) : 0;
+          const bunnyStatus = Number.isFinite(Number(data.bunnyStatus)) ? Number(data.bunnyStatus) : null;
+
+          let message = "⏳ Video processing...";
+          if (encode > 0) message += " (" + Math.round(encode) + "%)";
+          else if (bunnyStatus === 0) message += " (upload received, preparing video...)";
+          else if (bunnyStatus === 1) message += " (upload complete, starting processing...)";
+
+          status.innerText = message;
+          setExerciseProgress(30 + Math.min(40, Math.round(encode * 0.4)), "Processing video...");
         }
-        throw new Error("Video took too long to process");
+
+        throw new Error("Bunny took too long to prepare this video. The upload completed, but the video was not ready for transcription within 15 minutes.");
       }
 
       // ============================================================
