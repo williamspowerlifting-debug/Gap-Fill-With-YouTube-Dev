@@ -4583,6 +4583,7 @@ else if (ex.videoUrl) {
           list.innerHTML = '<p style="color:#991b1b;">❌ ' + e.message + "</p>";
         }
       }
+      
       async function copySavedStudentLink(lessonId) {
   if (!lessonId) return;
 
@@ -4601,7 +4602,6 @@ else if (ex.videoUrl) {
     showSuccessToast("✅ Student link copied!");
   }
 }
-
 
 async function generateSavedStudentLink(exerciseId) {
   if (!exerciseId) return;
