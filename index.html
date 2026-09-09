@@ -9,6 +9,7 @@
     <script src="https://accounts.google.com/gsi/client" async="" defer=""></script>
 
     <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
     <script>
       window.WORKER_URL = "https://gapfill-ai-googledrive-dev.williamspowerlifting.workers.dev";
     </script>
@@ -1012,6 +1013,20 @@ iframe.video-player,
   color: #065f46;
   font-weight: 600;
 }
+      /* ── Classroom sharing ── */
+      .share-classroom-panel { background:#f8fafc; border:1px solid #e5e7eb; border-radius:14px; padding:18px; margin:14px 0 24px; }
+      .share-link-row { display:flex; gap:8px; align-items:stretch; margin-top:8px; }
+      .share-link-input { flex:1; min-width:0; margin:0 !important; background:white; font-size:14px !important; }
+      .share-code-large { display:inline-block; font-family:monospace; font-size:28px; font-weight:800; letter-spacing:4px; background:#e0e7ff; color:#4338ca; padding:8px 14px; border-radius:10px; margin-top:8px; }
+      .share-methods { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+      .share-methods button { margin:0; }
+      .share-modal { max-width:560px; text-align:center; }
+      .share-modal h2 { margin-bottom:6px; }
+      .share-modal p { color:#6b7280; }
+      .qr-wrap { display:inline-flex; justify-content:center; align-items:center; background:white; padding:14px; border:1px solid #e5e7eb; border-radius:12px; margin:10px 0; }
+      .qr-wrap canvas { display:block; max-width:260px; height:auto; }
+      @media (max-width:560px) { .share-link-row { flex-direction:column; } .share-code-large { font-size:24px; } }
+
       /* ── Student Login & Dashboard UI ── */
 .student-view-container {
   max-width: 600px;
@@ -1282,6 +1297,12 @@ iframe.video-player,
 
         <button class="primary-blue full" onclick="previewExercise()">👀 Preview</button>
 
+        <div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
+          <button class="success" style="flex: 1; min-width: 220px;" onclick="generateLink()">🔗 Generate Student Link</button>
+          <button class="primary-blue" style="flex: 1; min-width: 220px;" onclick="addCurrentActivityToClassroom()">🏫 Add Activity to Classroom</button>
+        </div>
+        <div class="status" id="link"></div>
+
         <div style="margin-top: 12px; border-top: 1px solid #e5e7eb; padding-top: 12px; display: flex; justify-content: flex-end; flex-wrap: wrap">
           <button class="success" id="doneBtn" onclick="doneEditing()" style="padding: 10px 24px; font-size: 15px">
             ✅ Done
@@ -1414,10 +1435,19 @@ iframe.video-player,
     <div id="classroomDetailView" class="classroom-detail-view">
       <button class="secondary" onclick="backToClassroomList()" style="margin-bottom: 16px;">⬅ Back to Classrooms</button>
       <h2 id="detailClassName">Classroom Name</h2>
-      <div style="margin-bottom: 16px;">
-        Share this code with students: 
-        <span id="detailClassCode" class="classroom-code">------</span>
-        <button class="secondary" style="padding: 4px 10px; font-size: 13px;" onclick="copyClassroomCode()">📋 Copy</button>
+      <div class="share-classroom-panel">
+        <div style="font-size:14px;font-weight:700;">Share this classroom with your students</div>
+        <div style="font-size:13px;color:#6b7280;margin-top:4px;">The easiest option is to copy the link and send it to your students.</div>
+        <div class="share-link-row">
+          <input id="detailClassShareLink" class="share-link-input" type="text" readonly />
+          <button class="primary-blue" onclick="copyClassroomLink()">📋 Copy Link</button>
+        </div>
+        <div style="margin-top:10px;font-size:13px;color:#6b7280;">
+          Or use classroom code:
+          <span id="detailClassCode" class="classroom-code">------</span>
+          <button class="secondary" style="padding:4px 10px;font-size:13px;" onclick="copyClassroomCode()">📋 Copy Code</button>
+          <button class="secondary" style="padding:4px 10px;font-size:13px;" onclick="showClassroomShare()">▦ QR Code</button>
+        </div>
       </div>
 
       <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px;">
@@ -1454,12 +1484,40 @@ iframe.video-player,
     </div>
   </div>
 </div>
+
+<!-- Classroom Share Modal -->
+<div class="classroom-overlay" id="shareClassroomOverlay">
+  <div class="classroom-modal share-modal">
+    <button class="help-close" onclick="closeShareClassroom()">×</button>
+    <h2>🔗 Share your classroom</h2>
+    <p id="shareClassroomName">Students can use the link below to join your classroom.</p>
+    <div class="share-classroom-panel">
+      <div style="font-size:13px;color:#6b7280;font-weight:600;">Student join link</div>
+      <div class="share-link-row">
+        <input id="shareClassroomLink" class="share-link-input" type="text" readonly />
+        <button class="primary-blue" onclick="copyClassroomLink()">📋 Copy Link</button>
+      </div>
+      <div style="margin-top:18px;font-size:13px;color:#6b7280;font-weight:600;">Or give students this classroom code</div>
+      <div id="shareClassroomCode" class="share-code-large">------</div>
+      <div class="share-methods">
+        <button class="secondary" onclick="showClassroomQRCode()">▦ Show QR Code</button>
+        <button class="secondary" onclick="copyClassroomCode()">📋 Copy Code</button>
+      </div>
+      <div id="classroomQrArea" style="display:none;margin-top:12px;">
+        <div class="qr-wrap"><canvas id="classroomQrCanvas"></canvas></div>
+        <div style="font-size:13px;color:#6b7280;">Students can scan this with their phone.</div>
+      </div>
+    </div>
+    <p style="font-size:13px;margin-bottom:0;"><strong>Tip:</strong> Paste the link into Google Classroom, Teams, email, WhatsApp, or your school LMS.</p>
+  </div>
+</div>
+
     <!-- Student Login View -->
 <div id="studentLoginView" style="display: none;">
   <div class="student-view-container">
     <div class="student-card">
-      <h1>🎧 Join Classroom</h1>
-      <p>Enter your classroom code to get started.</p>
+      <h1>🎧 Join Your Classroom</h1>
+      <p>Use the classroom link from your teacher, or enter the classroom code below.</p>
       
       <input type="text" id="studentClassCodeInput" class="student-input" placeholder="e.g. Z4CRWQ" maxlength="6" />
       
@@ -2644,14 +2702,27 @@ function createHtml5MediaPlayer(videoElement) {
       // ── Classroom Management UI ─────────────────────────────────────────────
 let _currentClassroomId = null;
 let _currentClassroomActivities = [];
-let _selectedProgressActivityId = null;
-let _classroomProgressData = null;
 let _allTeacherActivities = [];
+let _pendingClassroomActivityId = null;
 
 window.openClassrooms = async function() {
   document.getElementById("classroomOverlay").classList.add("show");
   backToClassroomList();
   await loadClassroomList();
+};
+
+// Save the current activity first, then let the teacher choose a classroom.
+window.addCurrentActivityToClassroom = async function() {
+  if (!sentences.length) { alert("Create an activity first."); return; }
+  const saveResult = await saveExercise("Add activity to classroom");
+  if (!saveResult || saveResult.status !== "SUCCESS" || !saveResult.exerciseId) {
+    if (saveResult?.status === "AUTH_REQUIRED") alert("Please sign in with Google before adding an activity to a classroom.");
+    else alert("The activity could not be saved. Please try again.");
+    return;
+  }
+  _pendingClassroomActivityId = saveResult.exerciseId;
+  await openClassrooms();
+  if (_pendingClassroomActivityId) showSuccessToast("🏫 Select a classroom — this activity will be added automatically.");
 };
 
 window.closeClassrooms = function() {
@@ -2674,11 +2745,14 @@ async function loadClassroomList() {
     
     list.innerHTML = classrooms.map(c => `
       <div class="classroom-item" onclick="openClassroomDetail('${c.id}', '${escapeHtml(c.name)}', '${c.code}')">
-        <div>
+        <div style="flex:1;min-width:0;">
           <div style="font-weight:700;font-size:16px;">${escapeHtml(c.name)}</div>
           <div style="font-size:13px;color:#6b7280;">👨‍🎓 ${c.student_count} students · 📚 ${c.activity_count} activities</div>
         </div>
-        <div class="classroom-code">${c.code}</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+          <div class="classroom-code">${c.code}</div>
+          <button class="secondary" style="padding:7px 10px;font-size:12px;margin:0;" onclick="event.stopPropagation(); showClassroomShare('${c.id}', decodeURIComponent('${encodeURIComponent(c.name)}'), '${c.code}')">🔗 Share</button>
+        </div>
       </div>
     `).join("");
   } catch (e) {
@@ -2723,15 +2797,108 @@ window.createNewClassroom = async function() {
   }
 };
 
+function buildClassroomShareLink(code) {
+  const shareUrl = new URL(window.location.href);
+  shareUrl.search = "";
+  shareUrl.hash = "";
+  shareUrl.searchParams.set("class", String(code || "").toUpperCase());
+  return shareUrl.toString();
+}
+
+function setClassroomShareData(name, code) {
+  const link = buildClassroomShareLink(code);
+  const detailLink = document.getElementById("detailClassShareLink");
+  if (detailLink) detailLink.value = link;
+  const modalLink = document.getElementById("shareClassroomLink");
+  if (modalLink) modalLink.value = link;
+  const modalName = document.getElementById("shareClassroomName");
+  if (modalName) modalName.innerText = `Students can join ${name || "this classroom"} using the link below.`;
+  const modalCode = document.getElementById("shareClassroomCode");
+  if (modalCode) modalCode.innerText = String(code || "").toUpperCase();
+}
+
 window.openClassroomDetail = async function(classroomId, name, code) {
-_currentClassroomId = classroomId;
-_selectedProgressActivityId = null;
-_classroomProgressData = null;
-document.getElementById("classroomListView").style.display = "none";
-document.getElementById("classroomDetailView").classList.add("active");
-document.getElementById("detailClassName").innerText = name;
-document.getElementById("detailClassCode").innerText = code;
-await loadClassroomDetails();
+  _currentClassroomId = classroomId;
+  document.getElementById("classroomListView").style.display = "none";
+  document.getElementById("classroomDetailView").classList.add("active");
+  document.getElementById("detailClassName").innerText = name;
+  document.getElementById("detailClassCode").innerText = code;
+  setClassroomShareData(name, code);
+  await loadClassroomDetails();
+
+  if (_pendingClassroomActivityId) {
+    const activityId = _pendingClassroomActivityId;
+    const alreadyAssigned = _currentClassroomActivities.some((a) => a.activity_id === activityId);
+    if (alreadyAssigned) { _pendingClassroomActivityId = null; showSuccessToast("ℹ️ This activity is already in the classroom."); return; }
+    try {
+      const res = await fetch(WORKER + "/assign-activity", {
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+        body: JSON.stringify({ classroomId: _currentClassroomId, activityId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to assign activity");
+      _pendingClassroomActivityId = null;
+      showSuccessToast("✅ Activity added to " + name + "!");
+      await loadClassroomDetails();
+    } catch (e) {
+      console.error("Automatic classroom assignment failed:", e);
+      alert("The activity was saved, but could not be added to this classroom: " + e.message);
+    }
+  }
+};
+
+window.backToClassroomList = function() {
+  _currentClassroomId = null;
+  document.getElementById("classroomDetailView").classList.remove("active");
+  document.getElementById("classroomListView").style.display = "block";
+  loadClassroomList();
+};
+
+window.showClassroomShare = function(classroomId, name, code) {
+  if (classroomId) {
+    _currentClassroomId = classroomId;
+    setClassroomShareData(name, code);
+  } else {
+    setClassroomShareData(
+      document.getElementById("detailClassName").innerText,
+      document.getElementById("detailClassCode").innerText
+    );
+  }
+  document.getElementById("classroomQrArea").style.display = "none";
+  document.getElementById("shareClassroomOverlay").classList.add("show");
+};
+
+window.closeShareClassroom = function() {
+  document.getElementById("shareClassroomOverlay").classList.remove("show");
+};
+
+window.copyClassroomLink = function() {
+  const input = document.getElementById("shareClassroomLink") || document.getElementById("detailClassShareLink");
+  const link = input ? input.value : "";
+  if (!link) return;
+  navigator.clipboard.writeText(link).then(() => showSuccessToast("✅ Classroom link copied!"));
+};
+
+window.copyClassroomCode = function() {
+  const code = document.getElementById("detailClassCode").innerText;
+  navigator.clipboard.writeText(code).then(() => showSuccessToast("✅ Classroom code copied!"));
+};
+
+window.showClassroomQRCode = function() {
+  const link = document.getElementById("shareClassroomLink").value;
+  const area = document.getElementById("classroomQrArea");
+  area.style.display = "block";
+  const canvas = document.getElementById("classroomQrCanvas");
+  if (window.QRCode && canvas) {
+    QRCode.toCanvas(canvas, link, { width: 240, margin: 2 }, function(error) {
+      if (error) {
+        console.error(error);
+        area.innerHTML = '<p style="color:#991b1b;">Could not create the QR code. The link above still works.</p>';
+      }
+    });
+  } else {
+    area.innerHTML = '<p style="color:#991b1b;">QR code library could not be loaded. The link above still works.</p>';
+  }
 };
 
 window.backToClassroomList = function() {
@@ -2747,42 +2914,44 @@ window.copyClassroomCode = function() {
 };
 
 async function loadClassroomDetails() {
-if (!_currentClassroomId) return;
-try {
-const res = await fetch(WORKER + "/classroom-progress?classroomId=" + _currentClassroomId + "&teacherId=" + encodeURIComponent(getTeacherId()), { credentials: "include" });
-const data = await res.json();
-if (!res.ok) throw new Error(data.error);
-// Render students
-const studentList = document.getElementById("studentList");
-if (data.students && data.students.length > 0) {
-studentList.innerHTML = data.students.map(s => `
-<div style="padding:6px 8px;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;">
-<span>${escapeHtml(s.name)}</span>
-</div>
-`).join("");
-} else {
-studentList.innerHTML = '<p style="color:#999;font-size:13px;text-align:center;">No students yet.</p>';
-}
-// Render assigned activities
-_currentClassroomActivities = data.activities || [];
-const assignedList = document.getElementById("assignedActivityList");
-if (_currentClassroomActivities.length > 0) {
-assignedList.innerHTML = _currentClassroomActivities.map(a => `
-<div style="padding:6px 8px;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;">
-<span style="font-size:13px;">${escapeHtml(a.name || "Untitled")}</span>
-<button class="danger" style="padding:2px 8px;font-size:11px;" onclick="unassignActivity('${a.activity_id}')">Remove</button>
-</div>
-`).join("");
-} else {
-assignedList.innerHTML = '<p style="color:#999;font-size:13px;text-align:center;">No activities assigned.</p>';
-}
-// Cache progress data and render grid
-_classroomProgressData = { students: data.students, activities: data.activities, attempts: data.attempts };
-renderProgressGrid(data.students, data.activities, data.attempts);
-await loadActivitiesForDropdown(); // Refresh dropdown after loading details
-} catch (e) {
-console.error(e);
-}
+  if (!_currentClassroomId) return;
+  try {
+    const res = await fetch(WORKER + "/classroom-progress?classroomId=" + _currentClassroomId + "&teacherId=" + encodeURIComponent(getTeacherId()), { credentials: "include" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    
+    // Render students
+    const studentList = document.getElementById("studentList");
+    if (data.students && data.students.length > 0) {
+      studentList.innerHTML = data.students.map(s => `
+        <div style="padding:6px 8px;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;">
+          <span>${escapeHtml(s.name)}</span>
+        </div>
+      `).join("");
+    } else {
+      studentList.innerHTML = '<p style="color:#999;font-size:13px;text-align:center;">No students yet.</p>';
+    }
+    
+    // Render assigned activities
+    _currentClassroomActivities = data.activities || [];
+    const assignedList = document.getElementById("assignedActivityList");
+    if (_currentClassroomActivities.length > 0) {
+      assignedList.innerHTML = _currentClassroomActivities.map(a => `
+        <div style="padding:6px 8px;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:13px;">${escapeHtml(a.name || "Untitled")}</span>
+          <button class="danger" style="padding:2px 8px;font-size:11px;" onclick="unassignActivity('${a.activity_id}')">Remove</button>
+        </div>
+      `).join("");
+    } else {
+      assignedList.innerHTML = '<p style="color:#999;font-size:13px;text-align:center;">No activities assigned.</p>';
+    }
+    
+    // Render progress grid
+    renderProgressGrid(data.students, data.activities, data.attempts);
+    await loadActivitiesForDropdown(); // Refresh dropdown after loading details
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 async function loadActivitiesForDropdown() {
@@ -2878,167 +3047,57 @@ window.unassignActivity = async function(activityId) {
 };
 
 function renderProgressGrid(students, activities, attempts) {
-const container = document.getElementById("progressGridContainer");
-if (!students || students.length === 0 || !activities || activities.length === 0) {
-container.innerHTML = '<p style="color:#999;text-align:center;padding:16px;">Add students and assign activities to see the progress grid.</p>';
-return;
+  const container = document.getElementById("progressGridContainer");
+  if (!students || students.length === 0 || !activities || activities.length === 0) {
+    container.innerHTML = '<p style="color:#999;text-align:center;padding:16px;">Add students and assign activities to see the progress grid.</p>';
+    return;
+  }
+  
+  let html = '<div class="progress-grid">';
+  html += '<div class="grid-header" style="text-align:left;">Student</div>';
+  activities.forEach(a => {
+    const shortName = (a.name || 'Untitled').substring(0, 15);
+    html += `<div class="grid-header" title="${escapeHtml(a.name || 'Untitled')}">${escapeHtml(shortName)}${(a.name||'').length>15?'...':''}</div>`;
+  });
+  
+  students.forEach(s => {
+    html += `<div class="grid-cell" style="text-align:left;font-weight:600;">${escapeHtml(s.name)}</div>`;
+    activities.forEach(a => {
+      // Keep EVERY attempt for this student/activity. The Worker already stores
+      // each attempt as a separate row with an incrementing attempt_number.
+      const studentAttempts = (attempts || [])
+        .filter(att => att.student_id === s.id && att.activity_id === a.activity_id)
+        .sort((x, y) => Number(x.attempt_number || 0) - Number(y.attempt_number || 0));
+
+      if (studentAttempts.length > 0) {
+        const attemptCount = studentAttempts.length;
+        const attemptLabel = attemptCount === 1 ? '1 attempt' : `${attemptCount} attempts`;
+        const scoreList = studentAttempts
+          .map(att => `#${att.attempt_number}: ${att.score_percent}%`)
+          .join(' · ');
+        const detailList = studentAttempts
+          .map(att => `Attempt ${att.attempt_number}: ${att.correct_answers}/${att.total_questions} (${att.score_percent}%)`)
+          .join('\n');
+
+        html += `<div class="grid-cell has-score" title="${escapeHtml(detailList)}">
+          <div style="font-weight:700;">${attemptLabel}</div>
+          <div style="font-size:11px;line-height:1.4;margin-top:3px;">${escapeHtml(scoreList)}</div>
+        </div>`;
+      } else {
+        html += `<div class="grid-cell" style="color:#d1d5db;">-</div>`;
+      }
+    });
+  });
+  
+  html += '</div>';
+  container.innerHTML = html;
 }
-
-// Auto-select first activity if none selected or if selected activity no longer exists
-if (!_selectedProgressActivityId || !activities.find(a => a.activity_id === _selectedProgressActivityId)) {
-_selectedProgressActivityId = activities[0].activity_id;
-}
-
-// Activity selector tabs
-let html = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">';
-html += '<span style="font-size:13px;color:#6b7280;font-weight:600;margin-right:4px;">View:</span>';
-activities.forEach(a => {
-const isActive = a.activity_id === _selectedProgressActivityId;
-html += `<button class="tag-btn ${isActive ? 'active' : ''}" 
-onclick="selectProgressActivity('${a.activity_id}')" 
-style="font-size:13px;padding:6px 14px;">
-${escapeHtml(a.name || 'Untitled')}
-</button>`;
-});
-html += '</div>';
-
-// Find selected activity
-const selectedActivity = activities.find(a => a.activity_id === _selectedProgressActivityId);
-if (!selectedActivity) {
-container.innerHTML = html + '<p style="color:#999;">Select an activity to view progress.</p>';
-return;
-}
-
-// Determine max attempts across all students for this activity
-const maxAttempts = students.reduce((max, s) => {
-const count = (attempts || []).filter(att => att.student_id === s.id && att.activity_id === _selectedProgressActivityId).length;
-return Math.max(max, count);
-}, 0);
-
-// Build table
-html += '<div style="overflow-x:auto;border:1px solid #e5e7eb;border-radius:8px;">';
-html += '<table style="width:100%;border-collapse:collapse;font-size:14px;background:white;">';
-
-// Header
-html += '<thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">';
-html += '<th style="padding:12px;text-align:left;font-weight:700;color:#374151;position:sticky;left:0;background:#f9fafb;z-index:1;min-width:140px;">Student</th>';
-html += '<th style="padding:12px;text-align:center;font-weight:700;color:#374151;min-width:90px;">Attempts</th>';
-for (let i = 1; i <= maxAttempts; i++) {
-html += `<th style="padding:12px;text-align:center;font-weight:700;color:#374151;min-width:100px;">Attempt ${i}</th>`;
-}
-html += '<th style="padding:12px;text-align:center;font-weight:700;color:#374151;min-width:100px;background:#f0fdf4;">Best</th>';
-html += '</tr></thead><tbody>';
-
-// Rows
-students.forEach((s, rowIdx) => {
-const studentAttempts = (attempts || [])
-.filter(att => att.student_id === s.id && att.activity_id === _selectedProgressActivityId)
-.sort((x, y) => Number(x.attempt_number || 0) - Number(y.attempt_number || 0));
-
-const rowBg = rowIdx % 2 === 0 ? 'white' : '#fafafa';
-html += `<tr style="border-bottom:1px solid #f3f4f6;background:${rowBg};">`;
-html += `<td style="padding:12px;font-weight:600;color:#111;position:sticky;left:0;background:${rowBg};z-index:1;">${escapeHtml(s.name)}</td>`;
-
-if (studentAttempts.length === 0) {
-html += '<td style="padding:12px;text-align:center;color:#9ca3af;">0</td>';
-for (let i = 0; i < maxAttempts; i++) {
-html += '<td style="padding:12px;text-align:center;color:#d1d5db;">—</td>';
-}
-html += '<td style="padding:12px;text-align:center;color:#d1d5db;background:#f0fdf4;">—</td>';
-} else {
-html += `<td style="padding:12px;text-align:center;font-weight:600;color:#4f46e5;">${studentAttempts.length}</td>`;
-for (let i = 1; i <= maxAttempts; i++) {
-const attempt = studentAttempts.find(a => Number(a.attempt_number) === i);
-if (attempt) {
-const scoreColor = attempt.score_percent >= 80 ? '#10b981' : attempt.score_percent >= 50 ? '#f59e0b' : '#ef4444';
-html += `<td style="padding:12px;text-align:center;">
-<div style="font-weight:700;color:${scoreColor};font-size:15px;">${attempt.score_percent}%</div>
-<div style="font-size:11px;color:#6b7280;margin-top:2px;">${attempt.correct_answers}/${attempt.total_questions}</div>
-</td>`;
-} else {
-html += '<td style="padding:12px;text-align:center;color:#d1d5db;">—</td>';
-}
-}
-const bestScore = Math.max(...studentAttempts.map(a => a.score_percent));
-const bestColor = bestScore >= 80 ? '#10b981' : bestScore >= 50 ? '#f59e0b' : '#ef4444';
-html += `<td style="padding:12px;text-align:center;font-weight:700;color:${bestColor};font-size:15px;background:#f0fdf4;">${bestScore}%</td>`;
-}
-html += '</tr>';
-});
-
-html += '</tbody></table></div>';
-container.innerHTML = html;
-}
-
-window.selectProgressActivity = function(activityId) {
-_selectedProgressActivityId = activityId;
-if (_classroomProgressData) {
-renderProgressGrid(_classroomProgressData.students, _classroomProgressData.activities, _classroomProgressData.attempts);
-}
-};
       // ════════════════════════════════════════════════════
 // 🎓 STUDENT CLASSROOM FLOW (Phase 3)
 // ════════════════════════════════════════════════════
 
 let _currentStudentToken = null;
 let _currentStudentActivityId = null;
-
-// Override the routing at the bottom of the file to handle student views
-(async function studentRouter() {
-  const params = new URLSearchParams(location.search);
-  const classCode = params.get("class");
-  const token = params.get("token");
-  const shortId = params.get("id");
-  const rawData = params.get("data");
-
-  if (token) {
-    // Student is logged in, show dashboard
-    _currentStudentToken = token;
-    document.getElementById("app").style.display = "none";
-    document.getElementById("studentLoginView").style.display = "none";
-    document.getElementById("studentDashboardView").style.display = "block";
-    await renderStudentDashboard(token);
-  } else if (classCode) {
-    // Student has a code, show login
-    document.getElementById("app").style.display = "none";
-    document.getElementById("studentLoginView").style.display = "block";
-    document.getElementById("studentClassCodeInput").value = classCode.toUpperCase();
-    await fetchClassroomForLogin(classCode.toUpperCase());
-  } else if (shortId || rawData) {
-    // Legacy student link flow (keep existing behavior)
-    return; 
-  }
-})();
-
-// Intercept the existing legacy router to prevent it from running if we handled it above
-// (We do this by checking if app is hidden)
-const originalRouter = (function() {
-  const params = new URLSearchParams(location.search);
-  if (params.get("class") || params.get("token")) return; // Skip if Phase 3 handled it
-  
-  (async () => {
-    const shortId = params.get("id");
-    const rawData = params.get("data");
-    if (shortId) {
-      document.getElementById("app").innerHTML = '<div class="card"><p>⏳ Loading lesson…</p></div>';
-      try {
-        const res = await fetch(WORKER + "/load-lesson?id=" + encodeURIComponent(shortId));
-        if (!res.ok) throw new Error("Lesson not found (ID: " + shortId + ")");
-        const lesson = await res.json();
-        startStudent(lesson);
-      } catch (e) {
-        document.getElementById("app").innerHTML = '<div class="card"><h2>⚠️ ' + e.message + "</h2></div>";
-      }
-    } else if (rawData) {
-      try {
-        const json = LZString.decompressFromEncodedURIComponent(rawData) || rawData;
-        startStudent(JSON.parse(json));
-      } catch (e) {
-        document.getElementById("app").innerHTML = '<div class="card"><h2>⚠️ Invalid lesson link.</h2></div>';
-      }
-    }
-  })();
-})();
 
 async function fetchClassroomForLogin(code) {
   const status = document.getElementById("studentLoginStatus");
@@ -3158,8 +3217,8 @@ async function renderStudentDashboard(token) {
     
     const studentName = data.name || sessionStorage.getItem("_studentName") || "Student";
     document.getElementById("dashboardStudentName").innerText = "Welcome, " + studentName + "!";
-    // We don't have classroom name in this endpoint, but we can fetch it or just show "Your Classroom"
-    document.getElementById("dashboardClassName").innerText = "Your Classroom";
+    document.getElementById("dashboardClassName").innerText =
+      data.classroomName ? "🏫 " + data.classroomName : "Your Classroom";
     
     if (!data.activities || data.activities.length === 0) {
       list.innerHTML = '<p style="color:#999;text-align:center;padding:24px;">No activities assigned yet. Check back soon!</p>';
@@ -4100,6 +4159,61 @@ box.innerHTML = html;
           return;
         }
         startStudent(lesson, true);
+      }
+
+      // ============================================================
+      // 🔗 GENERATE STUDENT LINK — direct sharing
+      // ============================================================
+      async function generateLink() {
+        const lesson = buildLesson();
+        if (!lesson.videoUrl) { alert("Add a video first."); return; }
+        const hasGaps = lesson.sentences.some((s) => s.words.some((w) => w.isGap));
+        if (!hasGaps) { alert("No gaps yet. Click words or use Generate Gaps first."); return; }
+
+        const slim = {
+          videoUrl: lesson.videoUrl,
+          videoMode: lesson.videoMode,
+          youtubeVideoId: lesson.youtubeVideoId || "",
+          youtubeTitle: lesson.youtubeTitle || "",
+          sentences: lesson.sentences.map((s) => ({
+            words: s.words.map((w) => (w.isGap ? { t: w.text, g: 1 } : { t: w.text })),
+            s: Math.round(s.startTime * 100) / 100,
+            e: Math.round(s.endTime * 100) / 100,
+            ...(s.sectionEnd ? { x: 1 } : {}),
+          })),
+        };
+        const linkBox = document.getElementById("link");
+        if (linkBox) { linkBox.className = "status"; linkBox.innerHTML = "⏳ Saving lesson…"; }
+        try {
+          const res = await fetch(WORKER + "/save-lesson", {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(slim),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.id) throw new Error(data.error || "Save failed");
+          const link = location.origin + location.pathname + "?id=" + data.id;
+          if (linkBox) {
+            linkBox.className = "status success";
+            linkBox.innerHTML =
+              '<b>✅ Student Link:</b> <code style="font-size:1.1em;letter-spacing:1px;">' + escapeHtml(data.id) + "</code><br>" +
+              '<a href="' + escapeAttr(link) + '" target="_blank" rel="noopener" style="word-break:break-all;">' + escapeHtml(link) + "</a>" +
+              '<br><button class="primary-blue" style="margin-top:8px;" onclick="copyLink()">📋 Copy Link</button>';
+          }
+          window._lastLink = link;
+          window._lastLessonId = data.id;
+          await performAutoSave("Student link generated");
+        } catch (e) {
+          console.error("generateLink failed:", e);
+          if (linkBox) { linkBox.className = "status error"; linkBox.innerHTML = "❌ Could not save lesson: " + escapeHtml(e.message); }
+        }
+      }
+
+      function copyLink() {
+        const link = window._lastLink || "";
+        if (!link) return;
+        navigator.clipboard.writeText(link).then(() => showSuccessToast("✅ Student link copied!")).catch(() => {
+          const temp = document.createElement("textarea"); temp.value = link; document.body.appendChild(temp); temp.select();
+          document.execCommand("copy"); temp.remove(); showSuccessToast("✅ Student link copied!");
+        });
       }
 
       // ============================================================
@@ -5071,7 +5185,8 @@ if (nextSection >= 0) {
 (function () {
   (async () => {
     const params = new URLSearchParams(location.search);
-    const classCode = params.get("class");
+    const pathMatch = window.location.pathname.match(/\/join\/([A-Za-z0-9]{6})\/?$/i);
+    const classCode = params.get("class") || (pathMatch ? pathMatch[1] : null);
     const token = params.get("token");
     const shortId = params.get("id");
     const rawData = params.get("data");
@@ -5095,7 +5210,7 @@ if (nextSection >= 0) {
       return;
     }
 
-    // 3. Legacy Student Link (?id=...)
+    // 3. Legacy Student Link (?id=...) — preserved for existing teachers — preserved for existing teachers
     if (shortId) {
       document.getElementById("app").innerHTML = '<div class="card"><p>⏳ Loading lesson…</p></div>';
       try {
@@ -5109,7 +5224,7 @@ if (nextSection >= 0) {
       return;
     }
 
-    // 4. Legacy Compressed Data Link (?data=...)
+    // 4. Legacy Compressed Data Link (?data=...) — preserved for existing teachers — preserved for existing teachers
     if (rawData) {
       try {
         const json = LZString.decompressFromEncodedURIComponent(rawData) || rawData;
