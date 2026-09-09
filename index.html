@@ -2089,6 +2089,7 @@ iframe.video-player,
       // Video state
       let videoMode = null;
       let bunnyGuid = null;
+      let bunnyCdnHost = null;
       let bunnyDirectUrl = null;
       let bunnyEmbedUrl = null;
       let externalVideoUrl = null;
@@ -2169,6 +2170,7 @@ iframe.video-player,
           }
           const created = await createRes.json();
           bunnyGuid = created.guid;
+          bunnyCdnHost = created.cdnHost;
 
           // Pre-fill exercise name from filename if not already set
           const nameInput = document.getElementById("exerciseName");
@@ -2212,13 +2214,10 @@ iframe.video-player,
               onSuccess: () => resolve(),
             });
 
-            // TUS can resume an interrupted upload without starting again.
-            upload.findPreviousUploads().then((previousUploads) => {
-              if (previousUploads.length) {
-                upload.resumeFromPreviousUpload(previousUploads[0]);
-              }
-              upload.start();
-            }).catch(reject);
+            // Each upload creates a new Bunny video GUID, so there is no
+            // previous upload to resume here. Starting directly avoids the
+            // unnecessary HEAD /tusupload/<id> request that can return 404.
+            upload.start();
           });
 
           bunnyEmbedUrl = "https://iframe.mediadelivery.net/embed/" + created.libraryId + "/" + bunnyGuid;
@@ -2239,7 +2238,10 @@ iframe.video-player,
           hideHeaderActivitiesButton();
           revealStep("step2Card");
 
-          await waitForBunnyReady();
+          // TUS has finished sending the complete source file to Bunny.
+          // Do not block on Bunny's API status field here; it can remain at
+          // status 0 while the CDN playback asset is being prepared.
+          await prepareBunnyVideoForTranscription();
           setExerciseProgress(95, "Generating transcript...");
           await autoTranscribe();
         } catch (err) {
@@ -2250,54 +2252,29 @@ iframe.video-player,
         }
       }
 
-      async function waitForBunnyReady() {
+      async function prepareBunnyVideoForTranscription() {
         const status = document.getElementById("transcribeStatus");
         status.className = "status";
-        status.innerText = "⏳ Waiting for video to be ready...";
+        status.innerText = "⏳ Preparing video for transcription...";
 
-        // Bunny can briefly report status 0/1 immediately after a TUS upload
-        // while the uploaded asset is being handed over to the encoder.
-        // The Worker therefore also checks the actual 360p CDN file.
-        // Give large videos plenty of time, but never leave the UI hanging forever.
-        for (let i = 0; i < 450; i++) {
-          await new Promise((r) => setTimeout(r, i === 0 ? 0 : 2000));
-
-          const res = await fetch(WORKER + "/bunny-status?guid=" + encodeURIComponent(bunnyGuid));
-          const data = await res.json().catch(() => ({}));
-
-          if (!res.ok) {
-            throw new Error(data.error || ("Bunny status check failed (HTTP " + res.status + ")"));
-          }
-
-          if (data.failed) {
-            throw new Error(data.error || "Bunny encoding failed. Check MP4 Fallback is enabled in your Bunny library.");
-          }
-
-          if (data.done && data.cdnUrl) {
-            bunnyDirectUrl = data.cdnUrl;
-            const box = document.getElementById("videoBox");
-            box.innerHTML =
-              '<video id="builderPlayer" class="video-player" controls crossorigin="anonymous"><source src="' +
-              bunnyDirectUrl +
-              '" type="video/mp4"></video>';
-            builderPlayer = document.getElementById("builderPlayer");
-            mediaPlayer = createHtml5MediaPlayer(builderPlayer);
-            return;
-          }
-
-          const encode = Number.isFinite(Number(data.encodeProgress)) ? Number(data.encodeProgress) : 0;
-          const bunnyStatus = Number.isFinite(Number(data.bunnyStatus)) ? Number(data.bunnyStatus) : null;
-
-          let message = "⏳ Video processing...";
-          if (encode > 0) message += " (" + Math.round(encode) + "%)";
-          else if (bunnyStatus === 0) message += " (upload received, preparing video...)";
-          else if (bunnyStatus === 1) message += " (upload complete, starting processing...)";
-
-          status.innerText = message;
-          setExerciseProgress(30 + Math.min(40, Math.round(encode * 0.4)), "Processing video...");
+        if (!bunnyCdnHost || !bunnyGuid) {
+          throw new Error("Bunny video information is missing.");
         }
 
-        throw new Error("Bunny took too long to prepare this video. The upload completed, but the video was not ready for transcription within 15 minutes.");
+        bunnyDirectUrl = "https://" + bunnyCdnHost + "/" + bunnyGuid + "/play_360p.mp4";
+
+        const box = document.getElementById("videoBox");
+        box.innerHTML =
+          '<video id="builderPlayer" class="video-player" controls><source src="' +
+          bunnyDirectUrl +
+          '" type="video/mp4"></video>';
+        builderPlayer = document.getElementById("builderPlayer");
+        mediaPlayer = createHtml5MediaPlayer(builderPlayer);
+
+        // Give Bunny a few seconds to hand the uploaded file to the encoder.
+        // autoTranscribe() below has its own bounded retry loop for the case
+        // where AssemblyAI reaches the URL before encoding has completed.
+        await new Promise((r) => setTimeout(r, 5000));
       }
 
       // ============================================================
@@ -3445,16 +3422,38 @@ function studentLogout() {
         status.innerText = "🎙️ Transcribing... (30-90 seconds)";
 
         try {
-          const res = await fetch(WORKER + "/transcribe", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ audioUrl }),
-          });
-          if (!res.ok) {
-            const errBody = await res.text();
-            throw new Error("Transcribe failed: " + res.status + " " + errBody);
+          let data = null;
+          let lastError = null;
+
+          // Bunny may need time to expose the encoded MP4 to AssemblyAI.
+          // Retry submission rather than failing while the asset is still
+          // being prepared.
+          for (let attempt = 1; attempt <= 18; attempt++) {
+            try {
+              const res = await fetch(WORKER + "/transcribe", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ audioUrl }),
+              });
+
+              if (res.ok) {
+                data = await res.json();
+                break;
+              }
+
+              const errBody = await res.text();
+              lastError = new Error("Transcribe failed: " + res.status + " " + errBody);
+            } catch (e) {
+              lastError = e;
+            }
+
+            if (attempt < 18) {
+              status.innerText = "⏳ Waiting for video to become available for transcription... (" + attempt + "/17)";
+              await new Promise((r) => setTimeout(r, 10000));
+            }
           }
-          const data = await res.json();
+
+          if (!data) throw lastError || new Error("Transcription could not be started.");
           if (data.pending && data.jobId) {
             status.innerText = "⏳ Transcribing — checking every few seconds...";
             await pollTranscriptJob(data.jobId);
