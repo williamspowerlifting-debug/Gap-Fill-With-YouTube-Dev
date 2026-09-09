@@ -4882,7 +4882,7 @@ async function generateSavedStudentLink(exerciseId) {
           let cls = "progress-dot";
           if (i < studentState.currentIdx) cls += " done";
           if (i === studentState.currentIdx) cls += " current";
-          html += '<div class="' + cls + '"></div>';
+          html += '<button type="button" class="' + cls + '" onclick="loadSentence(' + i + ')" aria-label="Go to sentence ' + (i + 1) + '" title="Go to sentence ' + (i + 1) + '"></button>';
         }
         dots.innerHTML = html;
       }
@@ -5066,27 +5066,12 @@ async function generateSavedStudentLink(exerciseId) {
 
         showAnswerFeedback(sentIdx);
 
-        let countdown = 6;
-        const statusEl = document.getElementById("studentStatus");
-        if (statusEl) statusEl.innerText = "⏭ Next sentence in " + countdown + "s…";
-
-        studentState.autoAdvanceCountInterval = setInterval(() => {
-          countdown--;
-          if (statusEl && countdown > 0) statusEl.innerText = "⏭ Next sentence in " + countdown + "s…";
-        }, 1000);
-
-        studentState.autoAdvanceTimer = setTimeout(() => {
-          clearInterval(studentState.autoAdvanceCountInterval);
-          studentState.autoAdvanceTimer = null;
-          studentState.autoAdvanceCountInterval = null;
-          const nextSection = getNextStudentSection();
-
-if (nextSection >= 0) {
-  loadSentence(nextSection);
-} else {
-  showFinalScore();
-}
-        }, 6000);
+      // Auto-advance is currently disabled.
+// The teacher/student must press Next to continue.
+// The timer variables are intentionally retained so Auto Advance
+// can be made an optional setting in the future.
+studentState.autoAdvanceTimer = null;
+studentState.autoAdvanceCountInterval = null;
       }
 
       function sentenceHasBeenSubmitted(sentIdx) {
