@@ -4583,6 +4583,121 @@ else if (ex.videoUrl) {
           list.innerHTML = '<p style="color:#991b1b;">❌ ' + e.message + "</p>";
         }
       }
+      async function copySavedStudentLink(lessonId) {
+  if (!lessonId) return;
+
+  const link = location.origin + location.pathname + "?id=" + lessonId;
+
+  try {
+    await navigator.clipboard.writeText(link);
+    showSuccessToast("✅ Student link copied!");
+  } catch (e) {
+    const temp = document.createElement("textarea");
+    temp.value = link;
+    document.body.appendChild(temp);
+    temp.select();
+    document.execCommand("copy");
+    temp.remove();
+    showSuccessToast("✅ Student link copied!");
+  }
+}
+
+
+async function generateSavedStudentLink(exerciseId) {
+  if (!exerciseId) return;
+
+  try {
+    showSuccessToast("⏳ Generating student link...");
+
+    const res = await fetch(
+      WORKER +
+        "/load-teacher-exercise?teacherId=" +
+        encodeURIComponent(getTeacherId()) +
+        "&exerciseId=" +
+        encodeURIComponent(exerciseId),
+      { credentials: "include" }
+    );
+
+    if (!res.ok) {
+      throw new Error("Could not load activity");
+    }
+
+    const ex = await res.json();
+
+    if (!ex.videoUrl) {
+      alert("This activity does not have a video.");
+      return;
+    }
+
+    const slim = {
+      videoUrl: ex.videoUrl,
+      videoMode: ex.videoMode,
+      youtubeVideoId: ex.youtubeVideoId || "",
+      youtubeTitle: ex.youtubeTitle || "",
+      sentences: (ex.sentences || []).map((s) => ({
+        words: (s.words || []).map((w) =>
+          w.g ? { t: w.t, g: 1 } : { t: w.t }
+        ),
+        s: Number(s.s) || 0,
+        e: Number(s.e) || 0,
+        ...(s.x ? { x: 1 } : {}),
+      })),
+    };
+
+    const saveRes = await fetch(WORKER + "/save-lesson", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(slim),
+    });
+
+    const data = await saveRes.json();
+
+    if (!saveRes.ok || !data.id) {
+      throw new Error(data.error || "Could not generate student link");
+    }
+
+    const lessonId = data.id;
+    const link = location.origin + location.pathname + "?id=" + lessonId;
+
+    // Update the saved teacher activity so the link is remembered
+    const updateRes = await fetch(WORKER + "/save-teacher-exercise", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        teacherId: getTeacherId(),
+        exerciseId: ex.exerciseId,
+        name: ex.name,
+        createdAt: ex.createdAt || new Date().toISOString(),
+        lessonId: lessonId,
+        videoUrl: ex.videoUrl,
+        videoMode: ex.videoMode,
+        youtubeVideoId: ex.youtubeVideoId || "",
+        youtubeTitle: ex.youtubeTitle || "",
+        tags: Array.isArray(ex.tags) ? ex.tags : [],
+        originalTranscript: ex.originalTranscript || null,
+        sentences: ex.sentences || [],
+      }),
+    });
+
+    if (!updateRes.ok) {
+      console.warn("Student link created but activity could not be updated.");
+    }
+
+    await copySavedStudentLink(lessonId);
+
+    // Refresh My Activities so the button changes to "Copy Student Link"
+    if (typeof window._realOpenSavedExercises === "function") {
+      await window._realOpenSavedExercises();
+    } else if (typeof openSavedExercises === "function") {
+      await openSavedExercises();
+    }
+
+  } catch (e) {
+    console.error("generateSavedStudentLink failed:", e);
+    alert("Could not generate student link: " + e.message);
+  }
+}
 
       async function deleteSavedExercise(exerciseId) {
         if (!confirm("Are you sure you want to delete this activity? This cannot be undone.")) return;
