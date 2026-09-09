@@ -1936,14 +1936,15 @@ iframe.video-player,
                 " gap" +
                 (gapCount !== 1 ? "s" : "") +
                 "</div>" +
-                '<div class="exercise-item-actions">' +
-                '<button class="primary-blue" onclick="openSavedExercise(\'' +
-                ex.exerciseId +
-                "')\">✏️ Open & Edit</button>" +
-                '<button class="danger" onclick="deleteSavedExercise(\'' +
-                ex.exerciseId +
-                "')\">🗑 Delete</button>" +
-                "</div></div>"
+               '<div class="exercise-item-actions">' +
+'<button class="primary-blue" onclick="openSavedExercise(\'' + ex.exerciseId + '\')">✏️ Open & Edit</button>' +
+(
+  ex.lessonId
+    ? '<button class="success" onclick="copySavedStudentLink(\'' + ex.lessonId + '\')">📋 Copy Student Link</button>'
+    : '<button class="success" onclick="generateSavedStudentLink(\'' + ex.exerciseId + '\')">🔗 Generate Link</button>'
+) +
+'<button class="danger" onclick="deleteSavedExercise(\'' + ex.exerciseId + '\')">🗑 Delete</button>' +
+"</div></div>"
               );
             })
             .join("");
