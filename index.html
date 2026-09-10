@@ -2428,10 +2428,17 @@ builderPlayer = null;
             throw new Error(msg);
           }
 
-          const data = await res.json();
-          bunnyGuid = data.guid;
-          bunnyEmbedUrl = "https://iframe.mediadelivery.net/embed/" + data.libraryId + "/" + bunnyGuid;
-          videoMode = "bunny";
+         const data = await res.json();
+bunnyGuid = data.guid;
+bunnyCdnHost = data.cdnHost;
+
+bunnyEmbedUrl =
+  "https://iframe.mediadelivery.net/embed/" +
+  data.libraryId +
+  "/" +
+  bunnyGuid;
+
+videoMode = "bunny";
 
           clearInterval(fakeTimer);
           progressBar.style.width = "100%";
