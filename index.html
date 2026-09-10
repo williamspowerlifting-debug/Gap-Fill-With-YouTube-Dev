@@ -288,14 +288,8 @@
         height: 100%;
         width: 0%;
         background: linear-gradient(90deg, #4f46e5, #10b981);
-        transition: width 1.5s ease-in-out;
-        animation: progressPulse 2s ease-in-out infinite;
+        transition: width 0.4s ease;
         overflow: hidden;
-      }
-
-      @keyframes progressPulse {
-        0%, 100% { opacity: 0.75; }
-        50% { opacity: 1; }
       }
 
       .progress-fill::after {
@@ -2497,6 +2491,7 @@ videoMode = "bunny";
       }
 
       function finishYouTubeImportProgress() {
+        const progressWrap = document.getElementById("progressWrap");
         const progressBar = document.getElementById("progressBar");
         const status = document.getElementById("uploadStatus");
         const btn = document.getElementById("pasteImportBtn");
@@ -2505,6 +2500,13 @@ videoMode = "bunny";
         status.className = "status success";
         status.innerText = "✅ YouTube video and transcript are ready.";
         if (btn) btn.disabled = false;
+        setTimeout(function () {
+          progressWrap.classList.add("progress-fading");
+          setTimeout(function () {
+            progressWrap.style.display = "none";
+            progressWrap.classList.remove("progress-fading");
+          }, 450);
+        }, 650);
       }
 
       function failYouTubeImportProgress(message) {
@@ -2569,7 +2571,7 @@ console.log("Raw YouTube transcript:", transcript);
         revealStep("step2Card");
         hideHeaderActivitiesButton();
         const youtubePlayerReady = showVideoPlayer();
-        startIndeterminateExerciseProgress("Preparing activity…");
+        setExerciseProgress(65, "Preparing activity…");
         updateYouTubeImportProgress(65, "⏳ Preparing timed transcript…");
 
         const youtubeSegments = (transcript.transcript || []).filter(function (segment) {
