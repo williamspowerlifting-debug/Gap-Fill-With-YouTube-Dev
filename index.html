@@ -2291,11 +2291,16 @@ iframe.video-player,
               bunnyDirectUrl = data.cdnUrl;
 
               const box = document.getElementById("videoBox");
+              // Keep bunnyDirectUrl for AssemblyAI, but use Bunny's official
+              // embed player for browser playback. The raw CDN MP4 can be
+              // blocked when embedded in a <video> element by Bunny security
+              // / hotlink protection even though the URL opens directly.
               box.innerHTML =
-                '<video id="builderPlayer" class="video-player" controls><source src="' +
-                bunnyDirectUrl + '" type="video/mp4"></video>';
+                '<iframe id="builderPlayer" class="video-player" src="' +
+                bunnyEmbedUrl +
+                '?autoplay=false" allowfullscreen allow="autoplay;encrypted-media"></iframe>';
               builderPlayer = document.getElementById("builderPlayer");
-              mediaPlayer = createHtml5MediaPlayer(builderPlayer);
+              mediaPlayer = null;
 
               status.className = "status success";
               status.innerText = "✅ Video ready. Generating transcript...";
