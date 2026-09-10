@@ -1153,8 +1153,8 @@ iframe.video-player,
           <div class="sub">Upload a video. We'll do the rest.</div>
         </div>
         <div id="headerRight" style="display: flex; align-items: center; gap: 10px">
-          <button id="headerActivitiesBtn" class="secondary" onclick="openSavedExercises()">📚 My Activities</button>
-          <button id="headerClassroomsBtn" class="secondary" onclick="openClassrooms()">🏫 My Classrooms</button>
+          <button id="headerActivitiesBtn" class="secondary" onclick="openSavedExercises()">My Activities</button>
+          <button id="headerClassroomsBtn" class="secondary" onclick="openClassrooms()">My Classrooms</button>
           <div id="authArea" style="display: flex; align-items: center; gap: 8px">
             <div id="gSignInBtn"></div>
             <div id="userInfo" style="display: none; align-items: center; gap: 8px">
@@ -1191,7 +1191,7 @@ iframe.video-player,
 
         <div style="margin: 16px 0; text-align: center; color: #999; font-size: 13px">— OR —</div>
 
-        <label>Paste a direct video link or Google Drive link</label>
+        <label>Paste a direct video link, YouTube link or Google Drive link</label>
         <input
           type="text"
           id="videoUrl"
@@ -1215,10 +1215,10 @@ iframe.video-player,
       </div>
 
       <div id="statusRibbon">
-        <button class="ribbon-btn" onclick="openSavedExercises()">📚 My Activities</button>
-        <button class="ribbon-btn" onclick="createNewExercise()">➕ Create Activity</button>
-        <button class="ribbon-btn" onclick="duplicateCurrentExercise()">📄 Duplicate</button>
-        <button class="ribbon-btn" onclick="manualSaveExercise()">💾 Save</button>
+        <button class="ribbon-btn" onclick="openSavedExercises()">My Activities</button>
+        <button class="ribbon-btn" onclick="createNewExercise()">Create Activity</button>
+        <button class="ribbon-btn" onclick="duplicateCurrentExercise()">Duplicate</button>
+        <button class="ribbon-btn" onclick="manualSaveExercise()">Save</button>
         <span class="ribbon-save" id="ribbonSaveStatus">💾 Saved --:--:--</span>
       </div>
       <!-- Step 2 -->
@@ -1380,7 +1380,7 @@ iframe.video-player,
         <h3>My Activities</h3>
         <p>
           Click
-          <b>📚 My Activities</b>
+          <b>My Activities</b>
           at any time to see all activities you've created. You can open or delete them.
         </p>
         <h3>How students use it</h3>
@@ -1402,7 +1402,7 @@ iframe.video-player,
     <div class="saved-overlay" id="savedOverlay">
       <div class="saved-modal">
         <button class="help-close" id="savedCloseBtn" onclick="closeSavedExercises()">×</button>
-        <h2>📚 My Activities</h2>
+        <h2>My Activities</h2>
         <div class="saved-search-row">
           <input
             type="text"
