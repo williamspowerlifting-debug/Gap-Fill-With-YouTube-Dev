@@ -2229,7 +2229,13 @@ iframe.video-player,
           status.className = "status success";
           status.innerText = "✅ Uploaded! Processing video & transcribing...";
 
-          showVideoPlayer();
+         const videoBox = document.getElementById("videoBox");
+videoBox.innerHTML = `
+  <div class="video-player" style="display:flex;align-items:center;justify-content:center;">
+    ⏳ Preparing video...
+  </div>
+`;
+builderPlayer = null;
           exerciseProgressCurrent = 0;
           exerciseProgressTarget = 0;
 
