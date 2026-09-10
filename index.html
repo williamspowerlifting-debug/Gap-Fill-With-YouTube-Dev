@@ -288,8 +288,14 @@
         height: 100%;
         width: 0%;
         background: linear-gradient(90deg, #4f46e5, #10b981);
-        transition: width 0.4s ease;
+        transition: width 1.5s ease-in-out;
+        animation: progressPulse 2s ease-in-out infinite;
         overflow: hidden;
+      }
+
+      @keyframes progressPulse {
+        0%, 100% { opacity: 0.75; }
+        50% { opacity: 1; }
       }
 
       .progress-fill::after {
@@ -2491,18 +2497,15 @@ videoMode = "bunny";
       }
 
       function finishYouTubeImportProgress() {
-  const progressBar = document.getElementById("progressBar");
-  const status = document.getElementById("uploadStatus");
-  const btn = document.getElementById("pasteImportBtn");
-
-  progressBar.style.width = "100%";
-  progressBar.innerText = "Done";
-
-  status.className = "status success";
-  status.innerText = "✅ YouTube video and transcript are ready.";
-
-  if (btn) btn.disabled = false;
-}
+        const progressBar = document.getElementById("progressBar");
+        const status = document.getElementById("uploadStatus");
+        const btn = document.getElementById("pasteImportBtn");
+        progressBar.style.width = "100%";
+        progressBar.innerText = "Done";
+        status.className = "status success";
+        status.innerText = "✅ YouTube video and transcript are ready.";
+        if (btn) btn.disabled = false;
+      }
 
       function failYouTubeImportProgress(message) {
         const progressWrap = document.getElementById("progressWrap");
