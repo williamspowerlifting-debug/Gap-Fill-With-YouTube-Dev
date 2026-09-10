@@ -2491,23 +2491,18 @@ videoMode = "bunny";
       }
 
       function finishYouTubeImportProgress() {
-        const progressWrap = document.getElementById("progressWrap");
-        const progressBar = document.getElementById("progressBar");
-        const status = document.getElementById("uploadStatus");
-        const btn = document.getElementById("pasteImportBtn");
-        progressBar.style.width = "100%";
-        progressBar.innerText = "Done";
-        status.className = "status success";
-        status.innerText = "✅ YouTube video and transcript are ready.";
-        if (btn) btn.disabled = false;
-        setTimeout(function () {
-          progressWrap.classList.add("progress-fading");
-          setTimeout(function () {
-            progressWrap.style.display = "none";
-            progressWrap.classList.remove("progress-fading");
-          }, 450);
-        }, 650);
-      }
+  const progressBar = document.getElementById("progressBar");
+  const status = document.getElementById("uploadStatus");
+  const btn = document.getElementById("pasteImportBtn");
+
+  progressBar.style.width = "100%";
+  progressBar.innerText = "Done";
+
+  status.className = "status success";
+  status.innerText = "✅ YouTube video and transcript are ready.";
+
+  if (btn) btn.disabled = false;
+}
 
       function failYouTubeImportProgress(message) {
         const progressWrap = document.getElementById("progressWrap");
